@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "351226976171",
+    "project_id": "doantotnghiep-b7326",
+    "storage_bucket": "doantotnghiep-b7326.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:351226976171:android:0eaf5444cc318d654724ee",
+        "android_client_info": {
+          "package_name": "com.doantotnghiep"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDzOIcd0h2ct4jVa1dj-oQtsgCutdM9-rM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
