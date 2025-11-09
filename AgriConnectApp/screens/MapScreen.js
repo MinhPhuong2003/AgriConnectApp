@@ -1,47 +1,213 @@
-import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
-import Icon from "react-native-vector-icons/Ionicons";
+import React, { useEffect, useState, useRef } from "react";
+import {
+  View,
+  StyleSheet,
+  Text,
+  ActivityIndicator,
+  Alert,
+  PermissionsAndroid,
+  Platform,
+} from "react-native";
+import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
+import Geolocation from "@react-native-community/geolocation";
 
-const MapScreen = ({ navigation }) => {
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back-outline" size={26} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Map</Text>
-        <View style={{ width: 26 }} />
-      </View>
-
-      <View style={styles.body}>
-        <Icon name="location-outline" size={60} color="#999" />
-        <Text style={styles.text}>Map feature coming soon</Text>
-        <Text style={styles.subText}>
-          You’ll be able to view nearby farms and sellers here.
-        </Text>
-      </View>
-    </View>
-  );
+// Hàm tính khoảng cách (m) giữa 2 tọa độ (Haversine)
+const haversineDistanceMeters = (lat1, lon1, lat2, lon2) => {
+  const toRad = (v) => (v * Math.PI) / 180;
+  const R = 6371000; // m
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 };
 
-export default MapScreen;
+export default function MapScreen() {
+  const [location, setLocation] = useState(null);
+  const [region, setRegion] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const mapRef = useRef(null);
+
+  // Theo dõi nếu người dùng đang kéo map
+  const userPanning = useRef(false);
+  const lastPanTime = useRef(0);
+
+  const requestLocationPermission = async () => {
+    if (Platform.OS === "ios") return true;
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: "Yêu cầu quyền truy cập vị trí",
+          message: "Ứng dụng cần quyền vị trí để hoạt động chính xác.",
+          buttonNeutral: "Hỏi lại sau",
+          buttonNegative: "Từ chối",
+          buttonPositive: "Đồng ý",
+        }
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    let watcher;
+
+    const startLocation = async () => {
+      const hasPermission = await requestLocationPermission();
+      if (!hasPermission) {
+        Alert.alert("Cảnh báo", "Ứng dụng cần quyền vị trí để hoạt động.");
+        setLoading(false);
+        return;
+      }
+
+      Geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          setLocation({ latitude, longitude });
+
+          if (!region) {
+            setRegion({
+              latitude,
+              longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            });
+          }
+          setLoading(false);
+
+          watcher = Geolocation.watchPosition(
+            (pos) => {
+              setLocation({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude,
+              });
+            },
+            (err) => console.log("Watch error:", err),
+            { enableHighAccuracy: true, distanceFilter: 5 }
+          );
+        },
+        (error) => {
+          Alert.alert(
+            "Lỗi GPS",
+            `Mã lỗi: ${error.code}\n${error.message}\n\nHãy ra ngoài trời và bật Wi-Fi/4G.`
+          );
+          setLoading(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 60000,
+          maximumAge: 120000,
+        }
+      );
+    };
+
+    startLocation();
+
+    return () => {
+      if (watcher) Geolocation.clearWatch(watcher);
+    };
+  }, [region]);
+
+  // Khi user kéo map -> đánh dấu user đang panning
+  const handlePanDrag = () => {
+    userPanning.current = true;
+    lastPanTime.current = Date.now();
+  };
+
+  const handleRegionChangeComplete = (newRegion) => {
+    setRegion(newRegion);
+
+    if (!location) return;
+
+    // khoảng cách giữa center mới và vị trí user hiện tại (m)
+    const distToUser = haversineDistanceMeters(
+      newRegion.latitude,
+      newRegion.longitude,
+      location.latitude,
+      location.longitude
+    );
+
+    const timeSincePan = Date.now() - lastPanTime.current;
+
+    if (distToUser < 40) {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        },
+        800
+      );
+      // Reset flag panning sau khi animate (đã xử lý nút)
+      userPanning.current = false;
+      lastPanTime.current = 0;
+    }
+  };
+
+  // Không dùng onUserLocationChange để animate nữa (tránh zoom khi GPS cập nhật)
+  const handleUserLocationChange = (e) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setLocation({ latitude, longitude });
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+        <Text style={styles.loadingText}>Đang xác định vị trí...</Text>
+      </View>
+    );
+  }
+
+  if (!location) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Không thể lấy vị trí của bạn.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        showsUserLocation={true}
+        showsMyLocationButton={true}
+        followsUserLocation={false}
+        initialRegion={region}
+        onRegionChangeComplete={handleRegionChangeComplete}
+        onUserLocationChange={handleUserLocationChange}
+        onPanDrag={handlePanDrag}
+      />
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
-  header: {
-    backgroundColor: "#2e7d32",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  title: { color: "#fff", fontSize: 18, fontWeight: "bold" },
-  body: {
+  container: { flex: 1 },
+  map: { flex: 1 },
+  loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#f5f5f5",
   },
-  text: { fontSize: 18, fontWeight: "bold", marginTop: 10 },
-  subText: { fontSize: 14, color: "#777", marginTop: 5, textAlign: "center" },
+  loadingText: { marginTop: 10, fontSize: 16, color: "#333" },
+  errorText: {
+    fontSize: 16,
+    color: "red",
+    textAlign: "center",
+    paddingHorizontal: 20,
+  },
 });

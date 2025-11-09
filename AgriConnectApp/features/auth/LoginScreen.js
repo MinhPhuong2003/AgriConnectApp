@@ -222,9 +222,13 @@ const styles = StyleSheet.create({
     marginRight: 6,
   },
   textInput: {
-    flex: 1,
-    fontSize: 15,
-  },
+  flex: 1,
+  fontSize: 15,
+  paddingVertical: 0,
+  height: 40,
+  includeFontPadding: false,
+  color: "#000",           // THÊM DÒNG NÀY
+},
   error: {
     fontSize: 12,
     color: "red",

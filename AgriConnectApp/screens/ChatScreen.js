@@ -33,6 +33,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 14,
+    paddingTop: 40,
   },
   title: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   body: {

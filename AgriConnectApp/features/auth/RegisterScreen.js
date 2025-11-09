@@ -17,7 +17,7 @@ import firestore from "@react-native-firebase/firestore";
 const RegisterScreen = ({ navigation }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [selectedRole, setSelectedRole] = useState("buyer"); // default
+  const [selectedRole, setSelectedRole] = useState("buyer");
 
   const registerSchema = Yup.object().shape({
     name: Yup.string().required("Vui lòng nhập tên người dùng"),
@@ -155,9 +155,9 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={styles.error}>{errors.address}</Text>
             )}
 
-            {/* Vai trò */}
+            {/* Vai trò (chỉ buyer và farmer) */}
             <View style={styles.roleContainer}>
-              {["buyer", "farmer", "trader"].map((role) => (
+              {["buyer", "farmer"].map((role) => (
                 <TouchableOpacity
                   key={role}
                   style={[
@@ -172,11 +172,7 @@ const RegisterScreen = ({ navigation }) => {
                       selectedRole === role && styles.roleTextSelected,
                     ]}
                   >
-                    {role === "buyer"
-                      ? "Người mua"
-                      : role === "farmer"
-                      ? "Nông dân"
-                      : "Thương lái"}
+                    {role === "buyer" ? "Người mua" : "Nông dân"}
                   </Text>
                 </TouchableOpacity>
               ))}
