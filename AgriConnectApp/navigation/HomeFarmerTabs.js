@@ -60,7 +60,7 @@ const HomeFarmerTabs = () => {
       <Tab.Screen
         name="Profile"
         component={FarmerProfileScreen}
-        options={{ title: "Hồ sơ" }}
+        options={{ title: "Tôi" }}
       />
     </Tab.Navigator>
   );

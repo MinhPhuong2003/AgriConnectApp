@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,11 +10,14 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  PermissionsAndroid,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 import { launchImageLibrary } from "react-native-image-picker";
+import Geolocation from "@react-native-community/geolocation";
+import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 
 const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
 
@@ -24,24 +27,136 @@ const EditProfileScreen = ({ navigation }) => {
     phone: "",
     address: "",
     photoURL: "",
+    location: null,
   });
   const [loading, setLoading] = useState(false);
   const uid = auth().currentUser?.uid;
+  const mapRef = useRef(null);
 
   useEffect(() => {
     if (!uid) return;
+
     const fetchUser = async () => {
       try {
         const doc = await firestore().collection("users").doc(uid).get();
         if (doc.exists) {
-          setUserData(doc.data());
+          const data = doc.data();
+          setUserData({
+            name: data.name || "",
+            phone: data.phone || "",
+            address: data.address || "",
+            photoURL: data.photoURL || "",
+            location: data.location || null,
+          });
         }
       } catch (error) {
         console.error("❌ Lỗi khi tải thông tin user:", error);
       }
     };
+
+    const initLocation = async () => {
+      const doc = await firestore().collection("users").doc(uid).get();
+      if (doc.exists && doc.data()?.location?.latitude && doc.data()?.location?.longitude) {
+        setUserData((prev) => ({
+          ...prev,
+          location: {
+            latitude: doc.data().location.latitude,
+            longitude: doc.data().location.longitude,
+          },
+          address: doc.data().location.address || doc.data().address || "Vị trí đã lưu",
+        }));
+        return;
+      }
+
+      try {
+        setLoading(true);
+        const hasPermission = await requestLocationPermission();
+        if (!hasPermission) {
+          Alert.alert("Lỗi", "Bạn chưa cấp quyền vị trí");
+          return;
+        }
+        const coords = await getCurrentLocation();
+        setUserData((prev) => ({ ...prev, location: coords }));
+        const addr = await reverseGeocode(coords.latitude, coords.longitude);
+        setUserData((prev) => ({ ...prev, address: addr }));
+
+        mapRef.current?.animateToRegion(
+          {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          },
+          1000
+        );
+      } catch (error) {
+        console.error("Lỗi lấy vị trí:", error.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchUser();
+    initLocation();
   }, [uid]);
+
+  const requestLocationPermission = async () => {
+    if (Platform.OS !== "android") return true;
+    try {
+      const granted = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+        {
+          title: "Cấp quyền vị trí",
+          message: "Ứng dụng cần vị trí để lưu thông tin hồ sơ",
+          buttonPositive: "Cho phép",
+          buttonNegative: "Từ chối",
+        }
+      );
+      return granted === PermissionsAndroid.RESULTS.GRANTED;
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  };
+
+  const getCurrentLocation = () => {
+    return new Promise((resolve, reject) => {
+      Geolocation.getCurrentPosition(
+        (position) => resolve(position.coords),
+        (error) => reject(error),
+        {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 10000,
+        }
+      );
+    });
+  };
+
+  const reverseGeocode = async (lat, lng) => {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "ReactNativeApp/1.0" },
+      });
+      const data = await res.json();
+      return data?.display_name || "Không xác định địa chỉ";
+    } catch (error) {
+      console.error("Nominatim error:", error);
+      return "Lỗi lấy địa chỉ";
+    }
+  };
+
+  const handleRegionChange = async (region) => {
+    const newCoords = { latitude: region.latitude, longitude: region.longitude };
+    setUserData((prev) => ({ ...prev, location: newCoords }));
+    try {
+      const fullAddress = await reverseGeocode(newCoords.latitude, newCoords.longitude);
+      setUserData((prev) => ({ ...prev, address: fullAddress }));
+    } catch (error) {
+      setUserData((prev) => ({ ...prev, address: "Không thể lấy địa chỉ" }));
+    }
+  };
 
   const handleChoosePhoto = () => {
     launchImageLibrary({ mediaType: "photo" }, (response) => {
@@ -52,8 +167,8 @@ const EditProfileScreen = ({ navigation }) => {
   };
 
   const handleSave = async () => {
-    if (!userData.name.trim()) {
-      Alert.alert("Lỗi", "Vui lòng nhập tên.");
+    if (!userData.name.trim() || !userData.address || !userData.location) {
+      Alert.alert("Lỗi", "Vui lòng nhập đầy đủ thông tin và đảm bảo đã lấy được vị trí!");
       return;
     }
 
@@ -64,13 +179,26 @@ const EditProfileScreen = ({ navigation }) => {
         phone: userData.phone || "",
         address: userData.address || "",
         photoURL: userData.photoURL || "",
+        location: userData.location
+          ? {
+              latitude: userData.location.latitude,
+              longitude: userData.location.longitude,
+              address: userData.address,
+            }
+          : null,
+        updatedAt: firestore.FieldValue.serverTimestamp(),
       };
       await firestore().collection("users").doc(uid).set(safeData, { merge: true });
       const updatedDoc = await firestore().collection("users").doc(uid).get();
       if (updatedDoc.exists) {
         setUserData(updatedDoc.data());
       }
-      Alert.alert("✅ Thành công", "Cập nhật hồ sơ thành công!");
+      Alert.alert(
+        "✅ Thành công",
+        "Cập nhật hồ sơ thành công!",
+        [{ text: "OK" }],
+        { cancelable: false }
+      );
     } catch (error) {
       console.error("❌ Lỗi khi cập nhật hồ sơ:", error);
       Alert.alert("Lỗi", "Không thể cập nhật thông tin.");
@@ -132,13 +260,50 @@ const EditProfileScreen = ({ navigation }) => {
 
             <Text style={styles.label}>Địa chỉ:</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { textAlign: "left" }]}
               value={userData.address}
-              onChangeText={(text) =>
-                setUserData({ ...userData, address: text })
-              }
-              placeholder="Nhập địa chỉ"
+              onChangeText={(text) => setUserData({ ...userData, address: text })}
+              placeholder="Đang lấy vị trí..."
+              editable={true}
+              multiline={true}
+              scrollEnabled={false}
             />
+
+            {/* Mini Map */}
+            <View style={styles.mapContainer}>
+              {userData.location ? (
+                <MapView
+                  ref={mapRef}
+                  style={styles.map}
+                  provider={PROVIDER_GOOGLE}
+                  initialRegion={{
+                    latitude: userData.location.latitude,
+                    longitude: userData.location.longitude,
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  }}
+                  onRegionChangeComplete={handleRegionChange}
+                >
+                  <Marker
+                    coordinate={userData.location}
+                    draggable
+                    onDragEnd={(e) => {
+                      const newCoords = e.nativeEvent.coordinate;
+                      setUserData((prev) => ({ ...prev, location: newCoords }));
+                      reverseGeocode(newCoords.latitude, newCoords.longitude).then((addr) =>
+                        setUserData((prev) => ({ ...prev, address: addr }))
+                      );
+                    }}
+                  >
+                    <View style={styles.markerPin} />
+                  </Marker>
+                </MapView>
+              ) : (
+                <View style={styles.mapPlaceholder}>
+                  <Text style={styles.mapPlaceholderText}>Đang tải bản đồ...</Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
@@ -203,5 +368,39 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 16,
+  },
+  mapContainer: {
+    height: 200,
+    borderRadius: 10,
+    overflow: "hidden",
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  map: {
+    flex: 1,
+  },
+  mapPlaceholder: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f5f5f5",
+  },
+  mapPlaceholderText: {
+    color: "#999",
+    fontSize: 14,
+  },
+  markerPin: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#d32f2f",
+    borderWidth: 4,
+    borderColor: "#fff",
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
 });

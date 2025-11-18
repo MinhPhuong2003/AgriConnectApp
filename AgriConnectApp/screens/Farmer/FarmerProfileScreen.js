@@ -26,11 +26,10 @@ const FarmerProfileScreen = ({ navigation }) => {
 
   const uid = auth().currentUser?.uid;
 
-  // Kiểm tra đăng nhập khi component mount
   useEffect(() => {
     if (!auth().currentUser) {
       Alert.alert("Lỗi", "Vui lòng đăng nhập!");
-      navigation.replace('AuthFlow'); // Thay 'AuthFlow' bằng tên màn hình đăng nhập
+      navigation.replace('AuthFlow');
       return;
     }
   }, [navigation]);
@@ -51,7 +50,7 @@ const FarmerProfileScreen = ({ navigation }) => {
           setLoading(false);
         },
         (error) => {
-          console.error("❌ Lỗi tải dữ liệu user:", error);
+          console.error("Lỗi tải dữ liệu user:", error);
           setLoading(false);
         }
       );
@@ -71,7 +70,7 @@ const FarmerProfileScreen = ({ navigation }) => {
           setProducts(list);
         },
         (error) => {
-          console.error("❌ Lỗi tải sản phẩm:", error);
+          console.error("Lỗi tải sản phẩm:", error);
         }
       );
     return () => unsubscribe();
@@ -89,7 +88,7 @@ const FarmerProfileScreen = ({ navigation }) => {
           setOrders(list);
         },
         (error) => {
-          console.error("❌ Lỗi tải đơn hàng:", error);
+          console.error("Lỗi tải đơn hàng:", error);
         }
       );
     return () => unsubscribe();
@@ -103,10 +102,9 @@ const FarmerProfileScreen = ({ navigation }) => {
 
     try {
       setUpdating(true);
-      // Lưu ý: imageUri là URI cục bộ, cần upload lên Storage nếu muốn URL công khai
       await firestore().collection("users").doc(uid).update({ photoURL: imageUri });
     } catch (error) {
-      console.error("❌ Lỗi cập nhật ảnh:", error);
+      console.error("Lỗi cập nhật ảnh:", error);
       Alert.alert("Lỗi", "Không thể cập nhật ảnh đại diện.");
     } finally {
       setUpdating(false);
@@ -118,7 +116,7 @@ const FarmerProfileScreen = ({ navigation }) => {
       await auth().signOut();
       navigation.replace("AuthFlow");
     } catch (error) {
-      console.error("❌ Lỗi đăng xuất:", error);
+      console.error("Lỗi đăng xuất:", error);
       Alert.alert("Lỗi", "Không thể đăng xuất.");
     }
   };
@@ -160,7 +158,7 @@ const FarmerProfileScreen = ({ navigation }) => {
           <Image
             source={{ uri: userData.photoURL || DEFAULT_AVATAR }}
             style={styles.avatar}
-            onError={(e) => console.log("❌ Lỗi tải ảnh avatar:", e.nativeEvent.error)}
+            onError={(e) => console.log("Lỗi tải ảnh avatar:", e.nativeEvent.error)}
           />
           <View style={styles.cameraIcon}>
             <Icon name="camera-outline" size={20} color="#fff" />
@@ -184,7 +182,7 @@ const FarmerProfileScreen = ({ navigation }) => {
         </View>
         <View style={styles.infoCard}>
           <Icon name="trophy" size={20} color="#ff9800" />
-          <Text style={styles.infoText}>{userData.points || 0} điểm thưởng</Text>
+          <Text style={styles.infoText}>{userData.points || 0} điểm</Text>
         </View>
         <View style={styles.infoCard}>
           <Icon name="call-outline" size={20} color="#2e7d32" />
@@ -219,7 +217,7 @@ const FarmerProfileScreen = ({ navigation }) => {
                 <Image
                   source={{ uri: item.imageUrl }}
                   style={styles.productImage}
-                  onError={(e) => console.log("❌ Lỗi tải ảnh sản phẩm:", e.nativeEvent.error)}
+                  onError={(e) => console.log("Lỗi tải ảnh sản phẩm:", e.nativeEvent.error)}
                 />
                 <Text style={styles.productName} numberOfLines={1}>
                   {item.name}
@@ -233,7 +231,7 @@ const FarmerProfileScreen = ({ navigation }) => {
         )}
       </View>
 
-      {/* Actions */}
+      {/* Actions - ĐÃ THÊM NÚT QUẢN LÝ ĐƠN HÀNG */}
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.actionBtn}
@@ -257,6 +255,15 @@ const FarmerProfileScreen = ({ navigation }) => {
         >
           <Icon name="receipt-outline" size={22} color="#2e7d32" />
           <Text style={styles.actionText}>Lịch sử đơn hàng</Text>
+        </TouchableOpacity>
+
+        {/* NÚT MỚI: QUẢN LÝ ĐƠN HÀNG */}
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => navigation.navigate("OrderManagement")}
+        >
+          <Icon name="cart-outline" size={22} color="#2e7d32" />
+          <Text style={styles.actionText}>Quản lý đơn hàng</Text>
         </TouchableOpacity>
       </View>
 

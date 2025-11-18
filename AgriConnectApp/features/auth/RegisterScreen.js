@@ -27,7 +27,6 @@ const RegisterScreen = ({ navigation }) => {
     phone: Yup.string()
       .matches(/^[0-9]{10}$/, "Số điện thoại phải có 10 chữ số")
       .required("Vui lòng nhập số điện thoại"),
-    address: Yup.string().required("Vui lòng nhập địa chỉ"),
     password: Yup.string()
       .min(6, "Tối thiểu 6 ký tự")
       .required("Vui lòng nhập mật khẩu"),
@@ -38,7 +37,7 @@ const RegisterScreen = ({ navigation }) => {
 
   const handleRegister = async (values) => {
     try {
-      const { email, password, name, phone, address } = values;
+      const { email, password, name, phone } = values;
 
       const userCredential = await auth().createUserWithEmailAndPassword(
         email,
@@ -52,7 +51,6 @@ const RegisterScreen = ({ navigation }) => {
         email,
         phone,
         role: selectedRole,
-        address,
         verified: false,
         rating: 0,
         points: 0,
@@ -69,14 +67,13 @@ const RegisterScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Đăng Ký Tài Khoản</Text>
+      <Text style={styles.title}>ĐĂNG KÝ TÀI KHOẢN</Text>
 
       <Formik
         initialValues={{
           name: "",
           email: "",
           phone: "",
-          address: "",
           password: "",
           confirmPassword: "",
         }}
@@ -140,22 +137,7 @@ const RegisterScreen = ({ navigation }) => {
               <Text style={styles.error}>{errors.phone}</Text>
             )}
 
-            {/* Địa chỉ */}
-            <View style={styles.inputContainer}>
-              <Icon name="home-outline" size={20} color="#999" />
-              <TextInput
-                style={styles.input}
-                placeholder="Địa chỉ"
-                onChangeText={handleChange("address")}
-                onBlur={handleBlur("address")}
-                value={values.address}
-              />
-            </View>
-            {touched.address && errors.address && (
-              <Text style={styles.error}>{errors.address}</Text>
-            )}
-
-            {/* Vai trò (chỉ buyer và farmer) */}
+            {/* Vai trò */}
             <View style={styles.roleContainer}>
               {["buyer", "farmer"].map((role) => (
                 <TouchableOpacity
@@ -256,8 +238,19 @@ const RegisterScreen = ({ navigation }) => {
 export default RegisterScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 24, justifyContent: "center" },
-  title: { fontSize: 22, fontWeight: "bold", color: "#4A44F2", textAlign: "center" },
+  container: { 
+    flex: 1, 
+    backgroundColor: "#fff", 
+    padding: 24, 
+    justifyContent: "center" 
+  },
+  title: { 
+    fontSize: 22, 
+    fontWeight: "bold", 
+    color: "#4A44F2", 
+    textAlign: "center",
+    marginBottom: 20,
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -268,18 +261,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     marginBottom: 10,
   },
-  input: { flex: 1, height: 48, marginLeft: 8 },
-  error: { fontSize: 12, color: "red", marginLeft: 5, marginBottom: 5 },
+  input: { 
+    flex: 1, 
+    height: 48, 
+    marginLeft: 8 
+  },
+  error: { 
+    fontSize: 12, 
+    color: "red", 
+    marginLeft: 5, 
+    marginBottom: 5 
+  },
   button: {
     backgroundColor: "#4A44F2",
     padding: 15,
     borderRadius: 8,
     marginTop: 10,
   },
-  buttonText: { color: "#fff", textAlign: "center", fontWeight: "bold" },
-  signupContainer: { flexDirection: "row", justifyContent: "center", marginTop: 20 },
-  signupText: { color: "#4A44F2", fontWeight: "bold" },
-  roleContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  buttonText: { 
+    color: "#fff", 
+    textAlign: "center", 
+    fontWeight: "bold" 
+  },
+  signupContainer: { 
+    flexDirection: "row", 
+    justifyContent: "center", 
+    marginTop: 20 
+  },
+  signupText: { 
+    color: "#4A44F2", 
+    fontWeight: "bold" 
+  },
+  roleContainer: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    marginBottom: 12 
+  },
   roleButton: {
     flex: 1,
     padding: 10,
@@ -289,7 +306,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
   },
-  roleSelected: { backgroundColor: "#4A44F2", borderColor: "#4A44F2" },
-  roleText: { color: "#333" },
-  roleTextSelected: { color: "#fff", fontWeight: "bold" },
+  roleSelected: { 
+    backgroundColor: "#4A44F2", 
+    borderColor: "#4A44F2" 
+  },
+  roleText: { 
+    color: "#333" 
+  },
+  roleTextSelected: { 
+    color: "#fff", 
+    fontWeight: "bold" 
+  },
 });

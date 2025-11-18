@@ -1,4 +1,3 @@
-// ProductDetailScreen.js
 import React, { useEffect, useState, useRef } from "react";
 import {
   View,
@@ -12,29 +11,96 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
+import auth from "@react-native-firebase/auth";
 
 const PLACEHOLDER = "https://cdn-icons-png.flaticon.com/512/4202/4202843.png";
 
 const ProductDetailScreen = ({ route, navigation }) => {
   const { product } = route.params || {};
 
-  // === CHI TIẾT SẢN PHẨM ===
   const [selectedWeight, setSelectedWeight] = useState("5kg");
   const weights = ["5kg", "7kg", "10kg"];
   const discount = product?.discount || 0;
   const originalPrice = product?.price || 0;
   const discountedPrice = originalPrice * (1 - discount / 100);
-  const cartCount = 2;
-
+  const [cartCount, setCartCount] = useState(0);
   // === TÌM KIẾM ===
   const [searchQuery, setSearchQuery] = useState("");
   const [finalSearchQuery, setFinalSearchQuery] = useState("");
   const [isSearchMode, setIsSearchMode] = useState(false);
   const inputRef = useRef(null);
 
-  // === DỮ LIỆU TỪ FIRESTORE ===
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const user = auth().currentUser;
+    if (!user) return;
+
+    const cartRef = firestore().collection("carts").doc(user.uid);
+
+    const unsubscribe = cartRef.onSnapshot(
+      (doc) => {
+        if (doc.exists && doc.data()) {
+          const data = doc.data();
+          const items = data.items || [];
+          const total = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+          setCartCount(total);
+        } else {
+          setCartCount(0);
+        }
+      },
+      (error) => {
+        console.error("Lỗi theo dõi giỏ:", error);
+        setCartCount(0);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  const addToCart = async (product) => {
+    const user = auth().currentUser;
+    if (!user) {
+      alert("Vui lòng đăng nhập để thêm vào giỏ hàng!");
+      return;
+    }
+
+    const cartRef = firestore().collection("carts").doc(user.uid);
+
+    try {
+      await firestore().runTransaction(async (transaction) => {
+        const cartDoc = await transaction.get(cartRef);
+        let cartItems = [];
+
+        if (cartDoc.exists && cartDoc.data()) {
+          cartItems = cartDoc.data().items || [];
+        }
+
+        const existingIndex = cartItems.findIndex((item) => item.id === product.id);
+
+        if (existingIndex >= 0) {
+          cartItems[existingIndex].quantity += 1;
+        } else {
+          cartItems.push({
+            id: product.id,
+            name: product.name,
+            price: Math.round(product.price * (1 - (product.discount || 0) / 100)),
+            originalPrice: product.price,
+            discount: product.discount || 0,
+            imageUrl: product.imageUrl || PLACEHOLDER,
+            quantity: 1,
+          });
+        }
+
+        transaction.set(cartRef, { items: cartItems }, { merge: true });
+      });
+      alert("Đã thêm vào giỏ hàng!");
+    } catch (error) {
+      console.error("Lỗi thêm vào giỏ:", error);
+      alert("Không thể thêm vào giỏ. Vui lòng thử lại.");
+    }
+  };
 
   // === LẤY SẢN PHẨM ===
   useEffect(() => {
@@ -89,7 +155,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
     setFinalSearchQuery("");
   };
 
-  // === DỮ LIỆU ĐÁNH GIÁ ===
   const reviews = [
     {
       id: "1",
@@ -229,7 +294,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
     </View>
   );
 
-  // === RENDER KẾT QUẢ TÌM KIẾM ===
   const renderResultItem = ({ item }) => {
     const disc = item.discount || 0;
     const price = item.price || 0;
@@ -401,7 +465,10 @@ const ProductDetailScreen = ({ route, navigation }) => {
             <Icon name="chatbubble-outline" size={22} color="#666" />
             <Text style={styles.chatText}>Nhắn tin</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.addToCartBtn}>
+          <TouchableOpacity
+            style={styles.addToCartBtn}
+            onPress={() => addToCart(product)}
+          >
             <Text style={styles.addToCartText}>Thêm vào giỏ hàng</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buyNowBtn}>
@@ -415,7 +482,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
 export default ProductDetailScreen;
 
-// === STYLES ===
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: {

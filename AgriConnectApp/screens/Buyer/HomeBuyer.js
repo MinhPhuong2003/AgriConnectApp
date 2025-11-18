@@ -26,25 +26,96 @@ const HomeBuyer = ({ route, navigation }) => {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [isModalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [cartCount, setCartCount] = useState(2);
+  const [cartCount, setCartCount] = useState(0);
   const [userName, setUserName] = useState("Buyer");
   const [isCategoryFilterMode, setIsCategoryFilterMode] = useState(false);
   const [isSearchMode, setIsSearchMode] = useState(!!initialSearchQuery);
   const scrollViewRef = useRef(null);
   const inputRef = useRef(null);
 
-  // === HÀM VÀO CHẾ ĐỘ TÌM KIẾM KHI BẤM THANH TÌM KIẾM ===
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
+  };
+
+  useEffect(() => {
+    const user = auth().currentUser;
+    if (!user) {
+      setCartCount(0);
+      return;
+    }
+
+    const cartRef = firestore().collection("carts").doc(user.uid);
+
+    const unsubscribe = cartRef.onSnapshot(
+      (doc) => {
+        if (doc.exists && doc.data()) {
+          const items = doc.data().items || [];
+          const uniqueProductCount = items.filter(item => item && item.id).length;
+          setCartCount(uniqueProductCount);
+        } else {
+          setCartCount(0);
+        }
+      },
+      (error) => {
+        console.error("Lỗi theo dõi giỏ:", error);
+        setCartCount(0);
+      }
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // === THÊM VÀO GIỎ HÀNG (AN TOÀN) ===
+  const addToCart = async (product) => {
+    const user = auth().currentUser;
+    if (!user) {
+      alert("Vui lòng đăng nhập để thêm vào giỏ hàng!");
+      return;
+    }
+
+    const cartRef = firestore().collection("carts").doc(user.uid);
+
+    try {
+      await firestore().runTransaction(async (transaction) => {
+        const cartDoc = await transaction.get(cartRef);
+        let cartItems = [];
+
+        if (cartDoc.exists && cartDoc.data()) {
+          cartItems = cartDoc.data().items || [];
+        }
+
+        const existingIndex = cartItems.findIndex((item) => item.id === product.id);
+
+        if (existingIndex >= 0) {
+          cartItems[existingIndex].quantity += 1;
+        } else {
+          cartItems.push({
+            id: product.id,
+            name: product.name,
+            price: Math.round(product.price * (1 - (product.discount || 0) / 100)),
+            originalPrice: product.price,
+            discount: product.discount || 0,
+            imageUrl: product.imageUrl || PLACEHOLDER,
+            quantity: 1,
+          });
+        }
+
+        transaction.set(cartRef, { items: cartItems }, { merge: true });
+      });
+    } catch (error) {
+      console.error("Lỗi thêm vào giỏ:", error);
+      alert("Không thể thêm vào giỏ. Vui lòng thử lại.");
+    }
+  };
+
+  // === VÀO CHẾ ĐỘ TÌM KIẾM ===
   const enterSearchMode = () => {
     setIsSearchMode(true);
     setIsCategoryFilterMode(false);
     setSelectedCategory("");
     setSelectedSeason("Tất cả mùa");
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-
-    // Focus vào ô nhập sau khi UI đã cập nhật
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
+    setTimeout(() => inputRef.current?.focus(), 100);
   };
 
   // === LẤY TÊN USER ===
@@ -58,19 +129,16 @@ const HomeBuyer = ({ route, navigation }) => {
         .get()
         .then((doc) => {
           if (doc.exists) {
-            const data = doc.data();
-            setUserName(data.name || "Buyer");
+            setUserName(doc.data().name || "Buyer");
           }
         })
-        .catch((err) => console.log("Lỗi lấy tên người dùng:", err));
+        .catch((err) => console.log("Lỗi lấy tên:", err));
     }
   }, []);
 
   // === LẤY SẢN PHẨM ===
   useEffect(() => {
-    const q = firestore()
-      .collection("products")
-      .where("available", "==", true);
+    const q = firestore().collection("products").where("available", "==", true);
     const unsubscribe = q.onSnapshot(
       (snapshot) => {
         const list = snapshot.docs.map((doc) => ({
@@ -81,7 +149,7 @@ const HomeBuyer = ({ route, navigation }) => {
         setLoading(false);
       },
       (error) => {
-        console.error("Lỗi khi tải sản phẩm:", error);
+        console.error("Lỗi tải sản phẩm:", error);
         setLoading(false);
       }
     );
@@ -144,8 +212,7 @@ const HomeBuyer = ({ route, navigation }) => {
     const selectedCat = selectedCategory.toLowerCase().trim();
     const matchesQuery = query ? name.includes(query) : true;
     const matchesCategory = selectedCat ? itemCategory === selectedCat : true;
-    const matchesSeason =
-      selectedSeason === "Tất cả mùa" ? true : item.season === selectedSeason;
+    const matchesSeason = selectedSeason === "Tất cả mùa" ? true : item.season === selectedSeason;
     return matchesQuery && matchesCategory && matchesSeason;
   });
 
@@ -177,10 +244,10 @@ const HomeBuyer = ({ route, navigation }) => {
               <Text style={styles.discountedPrice}>
                 {discountedPrice.toFixed(0)}đ
               </Text>
-              <Text style={styles.originalPrice}>{originalPrice}đ</Text>
+              <Text style={styles.originalPrice}>{formatPrice(originalPrice)}</Text>
             </>
           ) : (
-            <Text style={styles.discountedPrice}>{originalPrice}đ</Text>
+            <Text style={styles.discountedPrice}>{formatPrice(originalPrice)}</Text>
           )}
         </View>
 
@@ -205,7 +272,7 @@ const HomeBuyer = ({ route, navigation }) => {
 
           <TouchableOpacity
             style={styles.addToCartButton}
-            onPress={() => alert(`Thêm ${item.name} vào giỏ`)}
+            onPress={() => addToCart(item)}
           >
             <Icon name="cart-outline" size={16} color="#fff" />
           </TouchableOpacity>
@@ -219,7 +286,6 @@ const HomeBuyer = ({ route, navigation }) => {
       {/* HEADER */}
       <View style={styles.header}>
         <View style={styles.searchRow}>
-          {/* NÚT BACK - HIỆN KHI TÌM KIẾM HOẶC LỌC */}
           {(isCategoryFilterMode || isSearchMode) && (
             <TouchableOpacity
               onPress={handleBackToHome}
@@ -229,14 +295,12 @@ const HomeBuyer = ({ route, navigation }) => {
             </TouchableOpacity>
           )}
 
-          {/* THANH TÌM KIẾM - BẤM VÀO LÀ VÀO CHẾ ĐỘ TÌM KIẾM */}
           <TouchableOpacity
             style={styles.searchBox}
             activeOpacity={1}
             onPress={enterSearchMode}
           >
             <Icon name="search" size={20} color="#666" />
-
             <TextInput
               ref={inputRef}
               style={styles.searchInput}
@@ -245,20 +309,14 @@ const HomeBuyer = ({ route, navigation }) => {
               value={inputQuery}
               onChangeText={setInputQuery}
               onSubmitEditing={handleSearch}
-              onFocus={() => {
-                if (!isSearchMode) enterSearchMode();
-              }}
+              onFocus={() => !isSearchMode && enterSearchMode()}
               returnKeyType="search"
             />
-
-            {/* Nút tìm kiếm - hiện khi có chữ và chưa bấm tìm */}
             {inputQuery && inputQuery !== searchQuery && (
               <TouchableOpacity onPress={handleSearch} style={{ marginLeft: 8 }}>
-                <Icon name="arrow-forward-circle" size={22} color="#2e7dc" />
+                <Icon name="arrow-forward-circle" size={22} color="#2e7d32" />
               </TouchableOpacity>
             )}
-
-            {/* Nút xóa - hiện khi đã tìm */}
             {searchQuery && (
               <TouchableOpacity onPress={handleSearchClear} style={{ marginLeft: 8 }}>
                 <Icon name="close-circle" size={20} color="#999" />
@@ -266,7 +324,6 @@ const HomeBuyer = ({ route, navigation }) => {
             )}
           </TouchableOpacity>
 
-          {/* GIỎ HÀNG */}
           <TouchableOpacity
             style={styles.cartIconContainer}
             onPress={() => navigation.navigate("Cart")}
@@ -279,7 +336,6 @@ const HomeBuyer = ({ route, navigation }) => {
             )}
           </TouchableOpacity>
 
-          {/* CHAT */}
           <TouchableOpacity
             style={styles.chatIconContainer}
             onPress={() => navigation.navigate("Chat")}
@@ -289,15 +345,10 @@ const HomeBuyer = ({ route, navigation }) => {
         </View>
       </View>
 
-      <ScrollView
-        ref={scrollViewRef}
-        showsVerticalScrollIndicator={false}
-        style={{ flex: 1 }}
-      >
-        {/* === TRANG CHỦ - KHÔNG TÌM KIẾM, KHÔNG LỌC === */}
+      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+        {/* === TRANG CHỦ === */}
         {!(isSearchMode || isCategoryFilterMode) && (
           <>
-            {/* BANNER */}
             <View style={styles.bannerWrapper}>
               <TouchableOpacity
                 style={styles.bannerContainer}
@@ -321,44 +372,42 @@ const HomeBuyer = ({ route, navigation }) => {
               </TouchableOpacity>
             </View>
 
-            {/* DANH MỤC + NÚT KHU VỰC */}
-      <View style={styles.categorySection}>
-        <View style={styles.categoryHeader}>
-          <Text style={styles.sectionTitle}>Danh mục sản phẩm</Text>
-          <TouchableOpacity
-            style={styles.locationButton}
-            onPress={() => navigation.navigate("PickupLocation")}
-          >
-            <Icon name="location-outline" size={16} color="#2e7d32" />
-            <Text style={styles.locationText}>TP. HCM và lân cận</Text>
-            <Icon name="chevron-forward" size={16} color="#2e7d32" />
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={categories}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.categoryItem,
-                selectedCategory === item.key && styles.categoryItemActive,
-              ]}
-              onPress={() => handleCategoryPress(item.key)}
-            >
-              <View style={styles.categoryIconCircle}>
-                <Icon name={item.icon} size={24} color="#2e7d32" />
+            <View style={styles.categorySection}>
+              <View style={styles.categoryHeader}>
+                <Text style={styles.sectionTitle}>Danh mục sản phẩm</Text>
+                <TouchableOpacity
+                  style={styles.locationButton}
+                  onPress={() => navigation.navigate("PickupLocation")}
+                >
+                  <Icon name="location-outline" size={16} color="#2e7d32" />
+                  <Text style={styles.locationText}>TP. HCM và lân cận</Text>
+                  <Icon name="chevron-forward" size={16} color="#2e7d32" />
+                </TouchableOpacity>
               </View>
-              <Text style={styles.categoryText}>{item.name}</Text>
-            </TouchableOpacity>
-          )}
-          contentContainerStyle={{ paddingHorizontal: 4 }}
-        />
-      </View>
 
-            {/* MÙA */}
+              <FlatList
+                data={categories}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryItem,
+                      selectedCategory === item.key && styles.categoryItemActive,
+                    ]}
+                    onPress={() => handleCategoryPress(item.key)}
+                  >
+                    <View style={styles.categoryIconCircle}>
+                      <Icon name={item.icon} size={24} color="#2e7d32" />
+                    </View>
+                    <Text style={styles.categoryText}>{item.name}</Text>
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={{ paddingHorizontal: 4 }}
+              />
+            </View>
+
             <View style={styles.seasonRow}>
               <Text style={styles.sectionTitle}>Sản phẩm theo mùa</Text>
               <TouchableOpacity
@@ -371,10 +420,7 @@ const HomeBuyer = ({ route, navigation }) => {
             </View>
 
             <Modal transparent visible={isModalVisible} animationType="fade">
-              <TouchableOpacity
-                style={styles.modalOverlay}
-                onPress={() => setModalVisible(false)}
-              >
+              <TouchableOpacity style={styles.modalOverlay} onPress={() => setModalVisible(false)}>
                 <View style={styles.modalBox}>
                   {seasons.map((season) => (
                     <TouchableOpacity
@@ -388,10 +434,7 @@ const HomeBuyer = ({ route, navigation }) => {
                       <Text
                         style={[
                           styles.modalText,
-                          selectedSeason === season && {
-                            fontWeight: "bold",
-                            color: "#2e7d32",
-                          },
+                          selectedSeason === season && { fontWeight: "bold", color: "#2e7d32" },
                         ]}
                       >
                         {season}
@@ -404,7 +447,7 @@ const HomeBuyer = ({ route, navigation }) => {
           </>
         )}
 
-        {/* === TAB DANH MỤC NGANG - CHỈ HIỆN KHI LỌC DANH MỤC === */}
+        {/* === TAB DANH MỤC KHI LỌC === */}
         {isCategoryFilterMode && !isSearchMode && (
           <View style={styles.categorySection}>
             <FlatList
@@ -431,7 +474,7 @@ const HomeBuyer = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* === DANH SÁCH SẢN PHẨM - CHỈ HIỆN KHI ĐÃ TÌM HOẶC Ở TRANG CHỦ === */}
+        {/* === DANH SÁCH SẢN PHẨM === */}
         {!isSearchMode || searchQuery ? (
           loading ? (
             <View style={{ marginTop: 30, alignItems: "center" }}>
@@ -440,10 +483,9 @@ const HomeBuyer = ({ route, navigation }) => {
           ) : filteredProducts.length === 0 ? (
             <View style={styles.emptyBox}>
               <Text style={styles.emptyText}>
-                {isSearchMode 
-                  ? `Không tìm thấy sản phẩm cho "${searchQuery}"` 
-                  : "Không có sản phẩm phù hợp."
-                }
+                {isSearchMode
+                  ? `Không tìm thấy sản phẩm cho "${searchQuery}"`
+                  : "Không có sản phẩm phù hợp."}
               </Text>
             </View>
           ) : (
@@ -472,23 +514,9 @@ export default HomeBuyer;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: {
-    backgroundColor: "#2ecc71",
-    paddingTop: 40,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  backButtonContainer: {
-    padding: 4,
-    marginRight: 2,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  header: { backgroundColor: "#2ecc71", paddingTop: 40, paddingHorizontal: 16, paddingBottom: 12 },
+  searchRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  backButtonContainer: { padding: 4, marginRight: 2, justifyContent: "center", alignItems: "center" },
   searchBox: {
     flex: 1,
     flexDirection: "row",
@@ -503,19 +531,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-    paddingVertical: 0,
-    marginLeft: 8,
-    fontWeight: "500",
-  },
-  cartIconContainer: {
-    padding: 8,
-    position: "relative",
-    borderRadius: 30,
-  },
+  searchInput: { flex: 1, fontSize: 16, color: "#333", paddingVertical: 0, marginLeft: 8, fontWeight: "500" },
+  cartIconContainer: { padding: 8, position: "relative", borderRadius: 30 },
   cartBadge: {
     position: "absolute",
     right: 4,
@@ -528,246 +545,49 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 4,
   },
-  badgeText: {
-    color: "#fff",
-    fontSize: 11,
-    fontWeight: "bold",
-  },
-  chatIconContainer: {
-    padding: 8,
-    borderRadius: 30,
-  },
-  bannerWrapper: {
-    marginTop: 0,
-    marginBottom: 16,
-    marginHorizontal: -16,
-    paddingHorizontal: 0,
-  },
-  bannerContainer: {
-    height: 160,
-    borderRadius: 0,
-    overflow: "hidden",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-  },
+  badgeText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
+  chatIconContainer: { padding: 8, borderRadius: 30 },
+  bannerWrapper: { marginTop: 0, marginBottom: 16, marginHorizontal: -16, paddingHorizontal: 0 },
+  bannerContainer: { height: 160, borderRadius: 0, overflow: "hidden", elevation: 6 },
   bannerImage: { width: "100%", height: "100%" },
-  bannerOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "center",
-    paddingHorizontal: 20,
-  },
-  bannerTitle: {
-    color: "#fff",
-    fontSize: 22,
-    fontWeight: "bold",
-    textShadowColor: "rgba(0,0,0,0.4)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  bannerSubtitle: {
-    color: "#fff",
-    fontSize: 15,
-    marginTop: 6,
-    textShadowColor: "rgba(0,0,0,0.3)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  bannerButton: {
-    marginTop: 12,
-    backgroundColor: "#e67e22",
-    alignSelf: "flex-start",
-    paddingHorizontal: 18,
-    paddingVertical: 8,
-    borderRadius: 25,
-    elevation: 3,
-  },
-  bannerButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  categorySection: { 
-    marginBottom: 8, 
-    paddingHorizontal: 16 
-  },
-  categoryItem: {
-    width: 70,
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 2,
-    paddingHorizontal: 4,
-  },
-  categoryItemActive: {
-    backgroundColor: "#e8f5e9",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-  },
-  categoryIconCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#e8f5e9",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 6,
-    marginTop: 6,
-  },
-  categoryText: {
-    fontSize: 12,
-    color: "#333",
-    fontWeight: "600",
-    textAlign: "center",
-    height: 32,
-    lineHeight: 16,
-  },
-  sectionTitle: { 
-    fontSize: 16, 
-    fontWeight: "bold", 
-    marginBottom: 8,
-  },
-  seasonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-    paddingHorizontal: 16,
-  },
-  seasonButton: {
-    backgroundColor: "#e8f5e9",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  seasonText: { 
-    color: "#2e7d32", 
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalBox: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    width: "80%",
-  },
+  bannerOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "center", paddingHorizontal: 20 },
+  bannerTitle: { color: "#fff", fontSize: 22, fontWeight: "bold", textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 3 },
+  bannerSubtitle: { color: "#fff", fontSize: 15, marginTop: 6, textShadowColor: "rgba(0,0,0,0.3)", textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 2 },
+  bannerButton: { marginTop: 12, backgroundColor: "#e67e22", alignSelf: "flex-start", paddingHorizontal: 18, paddingVertical: 8, borderRadius: 25, elevation: 3 },
+  bannerButtonText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+  categorySection: { marginBottom: 8, paddingHorizontal: 16 },
+  categoryItem: { width: 70, alignItems: "center", justifyContent: "center", marginHorizontal: 2, paddingHorizontal: 4 },
+  categoryItemActive: { backgroundColor: "#e8f5e9", borderRadius: 12, paddingHorizontal: 8 },
+  categoryIconCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: "#e8f5e9", justifyContent: "center", alignItems: "center", marginBottom: 6, marginTop: 6 },
+  categoryText: { fontSize: 12, color: "#333", fontWeight: "600", textAlign: "center", height: 32, lineHeight: 16 },
+  sectionTitle: { fontSize: 16, fontWeight: "bold", marginBottom: 8 },
+  seasonRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 10, paddingHorizontal: 16 },
+  seasonButton: { backgroundColor: "#e8f5e9", paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, flexDirection: "row", alignItems: "center" },
+  seasonText: { color: "#2e7d32", fontWeight: "600", fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.3)", justifyContent: "center", alignItems: "center" },
+  modalBox: { backgroundColor: "#fff", padding: 20, borderRadius: 12, width: "80%" },
   modalItem: { paddingVertical: 10 },
   modalText: { fontSize: 16, textAlign: "center" },
-
-  productsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-  },
+  productsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", paddingHorizontal: 16 },
   productWrapper: { width: "48%", marginBottom: 12 },
-  productCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 12,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  imageWrapper: {
-    width: "100%",
-    height: 100,
-    borderRadius: 12,
-    overflow: "hidden",
-    marginBottom: 10,
-    backgroundColor: "#f0f0f0",
-  },
+  productCard: { backgroundColor: "#fff", borderRadius: 16, padding: 12, elevation: 3 },
+  imageWrapper: { width: "100%", height: 100, borderRadius: 12, overflow: "hidden", marginBottom: 10, backgroundColor: "#f0f0f0" },
   productImage: { width: "100%", height: "100%" },
-  productName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-    minHeight: 40,
-    textAlign: "left",
-  },
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 8,
-  },
-  discountedPrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#e67e22",
-  },
-  originalPrice: {
-    fontSize: 13,
-    color: "#999",
-    textDecorationLine: "line-through",
-  },
-  ratingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 4,
-  },
+  productName: { fontSize: 15, fontWeight: "600", color: "#333", minHeight: 40, textAlign: "left" },
+  priceRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 8 },
+  discountedPrice: { fontSize: 16, fontWeight: "bold", color: "#e67e22" },
+  originalPrice: { fontSize: 13, color: "#999", textDecorationLine: "line-through" },
+  ratingRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
   singleStar: { marginRight: 2 },
   ratingText: { fontSize: 13, color: "#333", fontWeight: "600" },
   reviewCount: { fontSize: 12, color: "#777" },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 12,
-  },
-  preorderButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff8e1",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ffcc80",
-    gap: 6,
-  },
+  buttonRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
+  preorderButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff8e1", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "#ffcc80", gap: 6 },
   preorderText: { fontSize: 13, color: "#ff9800", fontWeight: "600" },
-  addToCartButton: {
-    backgroundColor: "#2e7d32",
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-  },
+  addToCartButton: { backgroundColor: "#2e7d32", width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
   emptyBox: { padding: 20, alignItems: "center" },
   emptyText: { color: "#555" },
-  categoryHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  locationButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#e8f5e9",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    gap: 4,
-  },
-  locationText: {
-    fontSize: 13,
-    color: "#2e7d32",
-    fontWeight: "600",
-  },
+  categoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
+  locationButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#e8f5e9", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
+  locationText: { fontSize: 13, color: "#2e7d32", fontWeight: "600" },
 });

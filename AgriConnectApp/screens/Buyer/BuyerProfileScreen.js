@@ -22,7 +22,6 @@ const BuyerProfileScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
-  // trạng thái đơn hàng
   const [pendingOrders, setPendingOrders] = useState([]);
   const [confirmedOrders, setConfirmedOrders] = useState([]);
   const [shippingOrders, setShippingOrders] = useState([]);
@@ -32,7 +31,6 @@ const BuyerProfileScreen = ({ navigation }) => {
     const uid = auth().currentUser?.uid;
     if (!uid) return;
 
-    // Lấy dữ liệu user
     const unsubscribeUser = firestore()
       .collection("users")
       .doc(uid)
@@ -42,46 +40,53 @@ const BuyerProfileScreen = ({ navigation }) => {
           setLoading(false);
         },
         (error) => {
-          console.error("❌ Lỗi tải dữ liệu user:", error);
+          console.error("Lỗi tải dữ liệu user:", error);
           setLoading(false);
         }
       );
 
-    // Lấy dữ liệu đơn hàng
     const unsubscribeOrders = firestore()
       .collection("orders")
       .where("userId", "==", uid)
-      .onSnapshot((snapshot) => {
-        const pending = [];
-        const confirmed = [];
-        const shipping = [];
-        const delivered = [];
+      .onSnapshot(
+        (snapshot) => {
+          const pending = [];
+          const confirmed = [];
+          const shipping = [];
+          const delivered = [];
 
-        snapshot.forEach((doc) => {
-          const order = { id: doc.id, ...doc.data() };
-          switch (order.status) {
-            case "pending":
-              pending.push(order);
-              break;
-            case "confirmed":
-              confirmed.push(order);
-              break;
-            case "shipping":
-              shipping.push(order);
-              break;
-            case "delivered":
-              delivered.push(order);
-              break;
-            default:
-              pending.push(order);
-          }
-        });
+          snapshot.forEach((doc) => {
+            const order = { id: doc.id, ...doc.data() };
+            switch (order.status) {
+              case "pending":
+                pending.push(order);
+                break;
+              case "confirmed":
+                confirmed.push(order);
+                break;
+              case "shipping":
+                shipping.push(order);
+                break;
+              case "delivered":
+                delivered.push(order);
+                break;
+              case "cancelled":
+                break;
+              default:
+                pending.push(order);
+            }
+          });
 
-        setPendingOrders(pending);
-        setConfirmedOrders(confirmed);
-        setShippingOrders(shipping);
-        setDeliveredOrders(delivered);
-      });
+          setPendingOrders(pending);
+          setConfirmedOrders(confirmed);
+          setShippingOrders(shipping);
+          setDeliveredOrders(delivered);
+        },
+        (error) => {
+          console.error("Lỗi tải đơn hàng:", error);
+          Alert.alert("Lỗi", "Không thể tải đơn hàng.");
+        }
+      );
 
     return () => {
       unsubscribeUser();
@@ -106,7 +111,7 @@ const BuyerProfileScreen = ({ navigation }) => {
         photoURL: imageUri,
       });
     } catch (error) {
-      console.error("❌ Lỗi cập nhật ảnh:", error);
+      console.error("Lỗi cập nhật ảnh:", error);
       Alert.alert("Lỗi", "Không thể cập nhật ảnh đại diện.");
     } finally {
       setUpdating(false);
@@ -118,7 +123,7 @@ const BuyerProfileScreen = ({ navigation }) => {
       await auth().signOut();
       navigation.replace("AuthFlow");
     } catch (error) {
-      console.error("❌ Lỗi khi đăng xuất:", error);
+      console.error("Lỗi khi đăng xuất:", error);
     }
   };
 
@@ -188,16 +193,6 @@ const BuyerProfileScreen = ({ navigation }) => {
             Địa chỉ: {userData.address || "Chưa có địa chỉ"}
           </Text>
         </View>
-        <View style={styles.infoRow}>
-          <Icon name="star-outline" size={20} color="#fbc02d" />
-          <Text style={styles.infoText}>
-            Đánh giá: {userData.rating?.toFixed(1) || "0.0"}
-          </Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Icon name="trophy-outline" size={20} color="#ff9800" />
-          <Text style={styles.infoText}>Điểm thưởng: {userData.points || 0}</Text>
-        </View>
       </View>
 
       {/* Order Status */}
@@ -205,38 +200,47 @@ const BuyerProfileScreen = ({ navigation }) => {
         <TouchableOpacity
           style={styles.statusItem}
           onPress={() =>
-            navigation.navigate("MyOrders", { orders: pendingOrders, status: "pending" })
+            navigation.navigate("MyOrder", { initialTab: "pending" })
           }
         >
           <Icon name="time-outline" size={24} color="#f39c12" />
-          <Text style={styles.statusText}>Đang xử lý ({pendingOrders.length})</Text>
+          <Text style={styles.statusText}>
+            Chờ xác nhận ({pendingOrders.length})
+          </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.statusItem}
           onPress={() =>
-            navigation.navigate("MyOrders", { orders: confirmedOrders, status: "confirmed" })
+            navigation.navigate("MyOrder", { initialTab: "confirmed" })
           }
         >
           <Icon name="cube-outline" size={24} color="#3498db" />
-          <Text style={styles.statusText}>Chờ giao ({confirmedOrders.length})</Text>
+          <Text style={styles.statusText}>
+            Đang vận chuyển ({confirmedOrders.length})
+          </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.statusItem}
           onPress={() =>
-            navigation.navigate("MyOrders", { orders: shippingOrders, status: "shipping" })
+            navigation.navigate("MyOrder", { initialTab: "shipping" })
           }
         >
           <Icon name="car-outline" size={24} color="#8e44ad" />
-          <Text style={styles.statusText}>Đang giao ({shippingOrders.length})</Text>
+          <Text style={styles.statusText}>
+            Đã giao ({shippingOrders.length})
+          </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.statusItem}
-          onPress={() =>
-            navigation.navigate("MyOrders", { orders: deliveredOrders, status: "delivered" })
-          }
+          onPress={() => navigation.navigate("ListReview")}
         >
-          <Icon name="checkmark-done-outline" size={24} color="green" />
-          <Text style={styles.statusText}>Đã giao ({deliveredOrders.length})</Text>
+          <Icon name="star-outline" size={24} color="#f1c40f" />
+          <Text style={styles.statusText}>
+            Đánh giá ({deliveredOrders.length})
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -244,7 +248,7 @@ const BuyerProfileScreen = ({ navigation }) => {
       <View style={styles.actions}>
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => navigation.navigate("MyOrders")}
+          onPress={() => navigation.navigate("MyOrder")}
         >
           <Icon name="cart-outline" size={22} color="#2e7d32" />
           <Text style={styles.actionText}>Đơn hàng của tôi</Text>
@@ -339,7 +343,12 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   statusItem: { alignItems: "center", width: 70 },
-  statusText: { fontSize: 12, color: "#555", marginTop: 6, textAlign: "center" },
+  statusText: {
+    fontSize: 12,
+    color: "#555",
+    marginTop: 6,
+    textAlign: "center",
+  },
   actions: {
     marginHorizontal: 20,
     marginTop: 10,

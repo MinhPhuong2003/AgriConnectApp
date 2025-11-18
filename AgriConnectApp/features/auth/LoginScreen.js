@@ -27,41 +27,69 @@ const LoginScreen = ({ navigation }) => {
   const [secureText, setSecureText] = useState(true);
   const [rememberMe, setRememberMe] = useState(false);
 
-  // ✅ Sửa phần login theo role
   const handleLogin = async (values) => {
-    try {
-      const userCredential = await auth().signInWithEmailAndPassword(
-        values.email,
-        values.password
-      );
-      const uid = userCredential.user.uid;
+  try {
+    const userCredential = await auth().signInWithEmailAndPassword(
+      values.email,
+      values.password
+    );
+    const uid = userCredential.user.uid;
 
-      const userDoc = await firestore().collection("users").doc(uid).get();
-      const userData = userDoc.data();
+    const userDoc = await firestore().collection("users").doc(uid).get();
+    const userData = userDoc.data();
 
-      if (!userData) {
-        Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng.");
-        return;
-      }
-
-      switch (userData.role) {
-        case "farmer":
-          navigation.replace("HomeFarmer");
-          break;
-        case "buyer":
-          navigation.replace("HomeBuyer");
-          break;
-        case "trader":
-          navigation.replace("HomeTrader");
-          break;
-        default:
-          navigation.replace("Home");
-          break;
-      }
-    } catch (error) {
-      Alert.alert("Đăng nhập thất bại", error.message);
+    if (!userData) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng.");
+      return;
     }
-  };
+
+    switch (userData.role) {
+      case "farmer":
+        navigation.replace("HomeFarmer");
+        break;
+      case "buyer":
+        navigation.replace("HomeBuyer");
+        break;
+      case "trader":
+        navigation.replace("HomeTrader");
+        break;
+      default:
+        navigation.replace("Home");
+        break;
+    }
+  } catch (error) {
+    let errorMessage = "Đã có lỗi xảy ra. Vui lòng thử lại.";
+
+    switch (error.code) {
+      case "auth/invalid-email":
+        errorMessage = "Email không hợp lệ.";
+        break;
+      case "auth/user-disabled":
+        errorMessage = "Tài khoản này đã bị vô hiệu hóa.";
+        break;
+      case "auth/user-not-found":
+        errorMessage = "Không tìm thấy tài khoản với email này.";
+        break;
+      case "auth/wrong-password":
+        errorMessage = "Mật khẩu không đúng.";
+        break;
+      case "auth/invalid-credential":
+        errorMessage = "Thông tin đăng nhập không đúng. Vui lòng kiểm tra lại email và mật khẩu.";
+        break;
+      case "auth/too-many-requests":
+        errorMessage = "Quá nhiều lần thử. Vui lòng thử lại sau vài phút.";
+        break;
+      case "auth/network-request-failed":
+        errorMessage = "Lỗi kết nối mạng. Vui lòng kiểm tra internet.";
+        break;
+      default:
+        errorMessage = "Đăng nhập thất bại. Vui lòng thử lại.";
+        break;
+    }
+
+    Alert.alert("Đăng nhập thất bại", errorMessage);
+  }
+};
 
   return (
     <SafeAreaView style={styles.container}>
@@ -227,7 +255,7 @@ const styles = StyleSheet.create({
   paddingVertical: 0,
   height: 40,
   includeFontPadding: false,
-  color: "#000",           // THÊM DÒNG NÀY
+  color: "#000",
 },
   error: {
     fontSize: 12,
