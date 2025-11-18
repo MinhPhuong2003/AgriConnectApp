@@ -4,9 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import SplashScreen from "../screens/SplashScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import AuthNavigator from "./AuthNavigator";
-// === MAIN SCREENS ===
 import ChatScreen from "../screens/ChatScreen";
-import MapScreen from "../screens/MapScreen";
 import CartScreen from "../screens/CartScreen";
 import ShippingMethodScreen from "../screens/ShippingMethodScreen";
 import PaymentMethodScreen from "../screens/PaymentMethodScreen";
@@ -18,21 +16,17 @@ import CancelOrderScreen from "../screens/CancelOrderScreen";
 import CancelSuccessScreen from "../screens/CancelSuccessScreen";
 import CheckoutScreen from "../screens/CheckoutScreen";
 import WritingReviewScreen from "../screens/WritingReviewScreen";
-
 import MyOrderScreen from "../screens/MyOrderScreen";
 import ReviewScreen from "../screens/ReviewScreen";
-
 import NotificationsScreen from "../screens/NotificationsScreen";
 import EditProfileScreen from "../screens/EditProfileScreen";
 import HomeFarmerTabs from "./HomeFarmerTabs";
 import HomeBuyerTabs from "./HomeBuyerTabs";
-
 import ProductScreen from "../screens/Farmer/ProductScreen";
 import AddProductScreen from "../screens/Farmer/AddProductScreen";
 import EditProductScreen from "../screens/Farmer/EditProductScreen";
 import ProductDetailScreen from "../screens/Farmer/ProductDetailScreen";
 import OrderManagementScreen from "../screens/Farmer/OrderManagementScreen";
-
 import CategoryProductsScreen from "../screens/CategoryProductsScreen";
 import PickupLocations from "../screens/Buyer/PickupLocations";
 import MapPickerScreen from "../screens/Buyer/MapPickerScreen";
@@ -51,7 +45,6 @@ export default function AppNavigator() {
 
         {/* === CÁC MÀN HÌNH CHUNG === */}
         <Stack.Screen name="Chat" component={ChatScreen} options={{ headerShown: false }} />
-        <Stack.Screen name="Map" component={MapScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Cart" component={CartScreen} options={{ headerShown: false }} />
         <Stack.Screen name="ShippingMethod" component={ShippingMethodScreen} options={{ headerShown: false }} />
         <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} options={{ headerShown: false }} />

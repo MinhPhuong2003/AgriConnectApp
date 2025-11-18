@@ -65,7 +65,6 @@ const HomeBuyer = ({ route, navigation }) => {
     return () => unsubscribe();
   }, []);
 
-  // === THÊM VÀO GIỎ HÀNG (AN TOÀN) ===
   const addToCart = async (product) => {
     const user = auth().currentUser;
     if (!user) {
@@ -192,6 +191,26 @@ const HomeBuyer = ({ route, navigation }) => {
     { id: "4", name: "Nông sản khô", icon: "cube-outline", key: "Nông sản khô" },
   ];
 
+  const getSeasonalSuggestion = () => {
+    const month = new Date().getMonth() + 1;
+    const suggestions = {
+      1: "Tháng 1: Bơ Booth Đắk Lắk đang chín mọng, béo ngậy!",
+      2: "Tháng 2: Dâu tây Đà Lạt vào chính vụ – đỏ mọng, ngọt lịm!",
+      3: "Tháng 3: Rau cải ngọt, cải thìa Đà Lạt tươi xanh mơn mởn!",
+      4: "Tháng 4: Thanh long ruột đỏ Bình Thuận ngọt như đường phèn!",
+      5: "Tháng 5: Măng cụt Lái Thiêu cùi dày trắng ngần, ăn là ghiền!",
+      6: "Tháng 6: Sầu riêng Ri6 cơm vàng hạt lép, thơm nồng nàn!",
+      7: "Tháng 7: Bưởi da xanh Bến Tre múi mọng nước, ngọt thanh mát!",
+      8: "Tháng 8: Hồng giòn Đà Lạt giòn tan từng miếng!",
+      9: "Tháng 9: Na dai Lạng Sơn cùi dày, ngọt mát giải nhiệt!",
+      10: "Tháng 10: Cam sành Hàm Yên chín vàng, thơm lừng cả vườn!",
+      11: "Tháng 11: Dâu tây Đà Lạt đẹp như tranh, ngọt từng quả!",
+      12: "Tháng 12: Hồng xiêm Xuân Đỉnh mềm tan, ngọt như mật!",
+    };
+
+    return suggestions[month] || "Hàng ngàn nông sản tươi ngon đang chờ bạn khám phá!";
+  };
+
   const seasons = ["Tất cả mùa", "Xuân", "Hạ", "Thu", "Đông"];
 
   const handleCategoryPress = (categoryKey) => {
@@ -217,15 +236,18 @@ const HomeBuyer = ({ route, navigation }) => {
   });
 
   const renderProduct = ({ item }) => {
-    const discount = item.discount || 0;
-    const originalPrice = item.price || 0;
-    const discountedPrice = originalPrice * (1 - discount / 100);
+  const discount = item.discount || 0;
+  const originalPrice = item.price || 0;
+  const discountedPrice = originalPrice * (1 - discount / 100);
 
-    return (
-      <TouchableOpacity
-        style={styles.productCard}
-        onPress={() => navigation.navigate("ProductDetail", { product: item })}
-      >
+  return (
+    <TouchableOpacity
+      style={styles.productCard}
+      onPress={() => navigation.navigate("ProductDetail", { product: item })}
+    >
+      {/* Bọc toàn bộ nội dung trong 1 View flex để đẩy nút xuống dưới cùng */}
+      <View style={{ flex: 1, justifyContent: "space-between" }}>
+        {/* Phần hình */}
         <View style={styles.imageWrapper}>
           <Image
             source={{ uri: item.imageUrl || PLACEHOLDER }}
@@ -234,23 +256,50 @@ const HomeBuyer = ({ route, navigation }) => {
           />
         </View>
 
+        {/* Tên sản phẩm - để numberOfLines={2} và minHeight nếu muốn */}
         <Text style={styles.productName} numberOfLines={2}>
           {item.name || "Sản phẩm"}
         </Text>
 
+        {/* Giá */}
         <View style={styles.priceRow}>
-          {discount > 0 ? (
-            <>
-              <Text style={styles.discountedPrice}>
-                {discountedPrice.toFixed(0)}đ
-              </Text>
-              <Text style={styles.originalPrice}>{formatPrice(originalPrice)}</Text>
-            </>
-          ) : (
-            <Text style={styles.discountedPrice}>{formatPrice(originalPrice)}</Text>
+          <View style={styles.priceWithIcon}>
+            <Icon name="cash-outline" size={16} color="#27ae60" /> 
+            <Text style={styles.discountedPrice}>
+              {discount > 0 
+                ? `${discountedPrice.toFixed(0)}đ` 
+                : formatPrice(originalPrice)
+              }
+            </Text>
+          </View>
+          {discount > 0 && (
+            <Text style={styles.originalPrice}>
+              {formatPrice(originalPrice)}
+            </Text>
           )}
         </View>
 
+        {/* Khu vực */}
+        {item.growingRegion ? (
+          <View style={styles.growingRegionRow}>
+            <Icon name="location-outline" size={14} color="#27ae60" />
+            <Text style={styles.growingRegionText} numberOfLines={1}>
+              {item.growingRegion}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Mùa vụ */}
+        {item.season ? (
+          <View style={styles.seasonRowInCard}>
+            <Icon name="calendar-outline" size={14} color="#27ae60" />
+            <Text style={styles.seasonTextInCard}>
+              Mùa vụ: {item.season}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* Đánh giá */}
         <View style={styles.ratingRow}>
           <Icon name="star" size={14} color="#ffc107" style={styles.singleStar} />
           <Text style={styles.ratingText}>
@@ -261,6 +310,7 @@ const HomeBuyer = ({ route, navigation }) => {
           </Text>
         </View>
 
+        {/* Nút hành động - sẽ luôn nằm dưới cùng */}
         <View style={styles.buttonRow}>
           <TouchableOpacity
             style={styles.preorderButton}
@@ -277,9 +327,10 @@ const HomeBuyer = ({ route, navigation }) => {
             <Icon name="cart-outline" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
-      </TouchableOpacity>
-    );
-  };
+      </View>
+    </TouchableOpacity>
+  );
+};
 
   return (
     <View style={styles.container}>
@@ -407,7 +458,16 @@ const HomeBuyer = ({ route, navigation }) => {
                 contentContainerStyle={{ paddingHorizontal: 4 }}
               />
             </View>
-
+            
+            {/* GỢI Ý MÙA NỔI BẬT – SIÊU ĐẸP, ĐÚNG VỊ TRÍ BẠN MUỐN */}
+            <View style={styles.seasonalTipContainer}>
+              <Icon name="sparkles" size={22} color="#fff" />
+              <Text style={styles.seasonalTipText}>
+                {getSeasonalSuggestion()}
+              </Text>
+              <Icon name="leaf" size={22} color="#fff" />
+            </View>
+            
             <View style={styles.seasonRow}>
               <Text style={styles.sectionTitle}>Sản phẩm theo mùa</Text>
               <TouchableOpacity
@@ -569,13 +629,25 @@ const styles = StyleSheet.create({
   modalItem: { paddingVertical: 10 },
   modalText: { fontSize: 16, textAlign: "center" },
   productsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", paddingHorizontal: 16 },
-  productWrapper: { width: "48%", marginBottom: 12 },
-  productCard: { backgroundColor: "#fff", borderRadius: 16, padding: 12, elevation: 3 },
+  productCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 12,
+    elevation: 3,
+    height: 320,
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  productWrapper: {
+    width: "48%",
+    marginBottom: 16,
+    justifyContent: "flex-start",
+  },
   imageWrapper: { width: "100%", height: 100, borderRadius: 12, overflow: "hidden", marginBottom: 10, backgroundColor: "#f0f0f0" },
   productImage: { width: "100%", height: "100%" },
-  productName: { fontSize: 15, fontWeight: "600", color: "#333", minHeight: 40, textAlign: "left" },
+  productName: { fontSize: 15, fontWeight: "600", color: "#333", minHeight: 15, textAlign: "center", height: 44 },
   priceRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 8 },
-  discountedPrice: { fontSize: 16, fontWeight: "bold", color: "#e67e22" },
+  discountedPrice: { fontSize: 16, fontWeight: "bold", color: "#27ae60" },
   originalPrice: { fontSize: 13, color: "#999", textDecorationLine: "line-through" },
   ratingRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
   singleStar: { marginRight: 2 },
@@ -590,4 +662,57 @@ const styles = StyleSheet.create({
   categoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   locationButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#e8f5e9", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
   locationText: { fontSize: 13, color: "#2e7d32", fontWeight: "600" },
+  growingRegionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    gap: 4,
+  },
+  growingRegionText: {
+    fontSize: 13,
+    color:"#27ae60",
+    fontWeight: "600",
+    flex: 1,
+  },
+  seasonRowInCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    gap: 4,
+  },
+  seasonTextInCard: {
+    fontSize: 13,
+    color: "#27ae60",
+    fontWeight: "600",
+  },
+  priceWithIcon: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  seasonalTipContainer: {
+    backgroundColor: "#27ae60",
+    marginHorizontal: 16,
+    marginVertical: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  seasonalTipText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    flex: 1,
+    letterSpacing: 0.4,
+  },
 });

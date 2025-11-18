@@ -27,6 +27,7 @@ const AddProductScreen = ({ navigation }) => {
   const [season, setSeason] = useState("");
   const [region, setRegion] = useState("");
   const [category, setCategory] = useState("");
+  const [growingRegion, setGrowingRegion] = useState(""); // THÊM MỚI: Khu vực địa lý (tự do nhập)
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isSeasonModalVisible, setSeasonModalVisible] = useState(false);
@@ -39,7 +40,7 @@ const AddProductScreen = ({ navigation }) => {
   useEffect(() => {
     if (!auth().currentUser) {
       Alert.alert("Lỗi", "Vui lòng đăng nhập trước khi thêm sản phẩm!");
-      navigation.navigate('Login'); // Thay 'Login' bằng tên màn hình đăng nhập của bạn
+      navigation.navigate('Login');
     }
   }, [navigation]);
 
@@ -165,25 +166,14 @@ const AddProductScreen = ({ navigation }) => {
       Alert.alert("Lỗi", "Vui lòng đăng nhập trước khi thêm sản phẩm!");
       return;
     }
-    if (!name || !price || !season || !region || !unit || !image || !category || !location) {
-      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin và đảm bảo đã lấy được vị trí!");
+
+    // KIỂM TRA THÊM growingRegion
+    if (!name || !price || !season || !region || !unit || !image || !category || !location || !growingRegion.trim()) {
+      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin, bao gồm cả khu vực địa lý (nơi trồng)!");
       return;
     }
 
-    const userId = auth().currentUser.uid; // Lấy UID của người dùng hiện tại
-    console.log("User ID:", userId); // Debug UID
-    console.log("Data to save:", {
-      name,
-      description,
-      price,
-      unit,
-      imageUrl: image,
-      season,
-      region,
-      category,
-      sellerId: userId,
-      location,
-    });
+    const userId = auth().currentUser.uid;
 
     try {
       setLoading(true);
@@ -196,7 +186,8 @@ const AddProductScreen = ({ navigation }) => {
         season,
         region,
         category,
-        sellerId: userId, // Sử dụng userId đã kiểm tra
+        growingRegion: growingRegion.trim(), // THÊM MỚI: Lưu khu vực địa lý
+        sellerId: userId,
         location: {
           latitude: location.latitude,
           longitude: location.longitude,
@@ -209,7 +200,7 @@ const AddProductScreen = ({ navigation }) => {
       });
 
       Alert.alert(
-        "✅ Thành công",
+        "Thành công",
         "Cập nhật sản phẩm thành công!",
         [
           {
@@ -222,8 +213,8 @@ const AddProductScreen = ({ navigation }) => {
         { cancelable: false }
       );
     } catch (error) {
-      console.error("❌ Lỗi thêm sản phẩm:", error);
-      Alert.alert("❌ Lỗi", error.message || "Không thể thêm sản phẩm.");
+      console.error("Lỗi thêm sản phẩm:", error);
+      Alert.alert("Lỗi", error.message || "Không thể thêm sản phẩm.");
     } finally {
       setLoading(false);
     }
@@ -392,6 +383,18 @@ const AddProductScreen = ({ navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* THÊM MỚI: Khu vực địa lý (tự do nhập) */}
+      <Text style={styles.label}>
+        Khu vực địa lý (nơi trồng){' '}
+      </Text>
+      <TextInput
+        style={styles.input}
+        value={growingRegion}
+        onChangeText={setGrowingRegion}
+        placeholder="Nhập khu vực trồng...)"
+        placeholderTextColor="#aaa"
+      />
 
       <Text style={styles.label}>Vị trí</Text>
       <TextInput

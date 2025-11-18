@@ -28,6 +28,7 @@ const EditProductScreen = ({ route, navigation }) => {
   const [season, setSeason] = useState(product.season || "");
   const [region, setRegion] = useState(product.region || "");
   const [category, setCategory] = useState(product.category || "");
+  const [growingRegion, setGrowingRegion] = useState(product.growingRegion || ""); // THÊM MỚI
   const [image, setImage] = useState(product.imageUrl || null);
   const [loading, setLoading] = useState(false);
   const [isSeasonModalVisible, setSeasonModalVisible] = useState(false);
@@ -150,8 +151,9 @@ const EditProductScreen = ({ route, navigation }) => {
   };
 
   const handleUpdateProduct = async () => {
-    if (!name || !price || !season || !region || !unit || !image || !category || !location) {
-      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin và đảm bảo đã lấy được vị trí!");
+    // THÊM KIỂM TRA growingRegion
+    if (!name || !price || !season || !region || !unit || !image || !category || !location || !growingRegion.trim()) {
+      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin, bao gồm cả khu vực địa lý (nơi trồng)!");
       return;
     }
 
@@ -166,6 +168,7 @@ const EditProductScreen = ({ route, navigation }) => {
         season,
         region,
         category,
+        growingRegion: growingRegion.trim(), // THÊM MỚI: Cập nhật khu vực địa lý
         location: {
           latitude: location.latitude,
           longitude: location.longitude,
@@ -208,11 +211,9 @@ const EditProductScreen = ({ route, navigation }) => {
         </Text>
       </View>
 
-      {/* Tên */}
       <Text style={styles.label}>Tên sản phẩm</Text>
       <TextInput style={styles.input} value={name} onChangeText={setName} />
 
-      {/* Mô tả */}
       <Text style={styles.label}>Mô tả</Text>
       <TextInput
         style={[styles.input, styles.textarea]}
@@ -221,7 +222,6 @@ const EditProductScreen = ({ route, navigation }) => {
         onChangeText={setDescription}
       />
 
-      {/* Giá */}
       <Text style={styles.label}>Giá (VNĐ)</Text>
       <TextInput
         style={styles.input}
@@ -230,7 +230,6 @@ const EditProductScreen = ({ route, navigation }) => {
         keyboardType="numeric"
       />
 
-      {/* Đơn vị */}
       <Text style={styles.label}>Đơn vị</Text>
       <TouchableOpacity
         style={[styles.input, styles.selectBox]}
@@ -273,7 +272,6 @@ const EditProductScreen = ({ route, navigation }) => {
         </View>
       </Modal>
 
-      {/* Danh mục */}
       <Text style={styles.label}>Danh mục</Text>
       <TouchableOpacity
         style={[styles.input, styles.selectBox]}
@@ -316,7 +314,6 @@ const EditProductScreen = ({ route, navigation }) => {
         </View>
       </Modal>
 
-      {/* Mùa vụ */}
       <Text style={styles.label}>Mùa vụ</Text>
       <TouchableOpacity
         style={[styles.input, styles.selectBox]}
@@ -358,6 +355,18 @@ const EditProductScreen = ({ route, navigation }) => {
           </View>
         </View>
       </Modal>
+
+      {/* THÊM MỚI: Khu vực địa lý (nơi trồng) */}
+      <Text style={styles.label}>
+        Khu vực địa lý{' '}
+      </Text>
+      <TextInput
+        style={styles.input}
+        value={growingRegion}
+        onChangeText={setGrowingRegion}
+        placeholder="Nhập khu vực trồng..."
+        placeholderTextColor="#aaa"
+      />
 
       {/* Vị trí */}
       <Text style={styles.label}>Vị trí</Text>
