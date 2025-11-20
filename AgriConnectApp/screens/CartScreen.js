@@ -8,6 +8,7 @@ import {
   ScrollView,
   FlatList,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
@@ -24,7 +25,6 @@ const CartScreen = ({ navigation }) => {
     { id: "s2", name: "Trái cây sấy khô thực dưỡng", price: 35000, rating: 4.8, reviews: 315, image: "https://via.placeholder.com/100" },
   ]);
 
-  // === TẢI GIỎ HÀNG + selected TỪ FIRESTORE ===
   useEffect(() => {
     const user = auth().currentUser;
     if (!user) {
@@ -153,7 +153,6 @@ const CartScreen = ({ navigation }) => {
             items.splice(index, 1);
           } else {
             items[index].quantity = newQty;
-            items[index].selected = selectedMap.get(id) || false;
           }
           transaction.set(cartRef, { items }, { merge: true });
         }
@@ -161,6 +160,41 @@ const CartScreen = ({ navigation }) => {
     } catch (error) {
       console.error("Lỗi cập nhật số lượng:", error);
     }
+  };
+
+  const removeFromCart = async (id, name) => {
+    Alert.alert(
+      "Xóa sản phẩm",
+      `Bạn có chắc muốn xóa\n"${name}"\nkhỏi giỏ hàng?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: async () => {
+            const user = auth().currentUser;
+            if (!user) return;
+
+            const cartRef = firestore().collection("carts").doc(user.uid);
+
+            try {
+              await firestore().runTransaction(async (transaction) => {
+                const doc = await transaction.get(cartRef);
+                if (!doc.exists || !doc.data()) return;
+
+                let items = doc.data().items || [];
+                items = items.filter((i) => i.id !== id);
+                transaction.set(cartRef, { items }, { merge: true });
+              });
+            } catch (error) {
+              console.error("Lỗi xóa sản phẩm:", error);
+              Alert.alert("Lỗi", "Không thể xóa sản phẩm. Vui lòng thử lại.");
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   useEffect(() => {
@@ -194,6 +228,13 @@ const CartScreen = ({ navigation }) => {
           <Icon name="add" size={16} color="#666" />
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity
+        style={styles.deleteBtn}
+        onPress={() => removeFromCart(item.id, item.name)}
+      >
+        <Icon name="trash-outline" size={22} color="#e74c3c" />
+      </TouchableOpacity>
     </View>
   );
 
@@ -312,15 +353,37 @@ const styles = StyleSheet.create({
   header: { backgroundColor: "#2e7d32", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14, paddingTop: 40 },
   title: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   cartList: { paddingHorizontal: 16, marginTop: 12 },
-  cartItem: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: 12, borderRadius: 12, marginBottom: 12, elevation: 2 },
+  cartItem: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    backgroundColor: "#fff", 
+    padding: 12, 
+    borderRadius: 12, 
+    marginBottom: 12, 
+    elevation: 2,
+    justifyContent: "space-between"
+  },
   checkbox: { marginRight: 12 },
   itemImage: { width: 60, height: 60, borderRadius: 8, backgroundColor: "#f0f0f0" },
   itemInfo: { flex: 1, marginLeft: 12 },
   itemName: { fontSize: 14, color: "#333", lineHeight: 20 },
   itemPrice: { fontSize: 15, fontWeight: "bold", color: "#e67e22", marginTop: 4 },
-  quantityControl: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#ddd", borderRadius: 8, overflow: "hidden" },
+  quantityControl: { 
+    flexDirection: "row", 
+    alignItems: "center", 
+    borderWidth: 1, 
+    borderColor: "#ddd", 
+    borderRadius: 8, 
+    overflow: "hidden",
+    marginRight: 10
+  },
   qtyBtn: { width: 28, height: 28, justifyContent: "center", alignItems: "center", backgroundColor: "#f9f9f9" },
   qtyText: { width: 32, textAlign: "center", fontSize: 14, fontWeight: "600" },
+  deleteBtn: {
+    padding: 8,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   fixedBottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#eee", elevation: 10 },
   selectAllRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
   selectAllCheckbox: { marginRight: 8 },

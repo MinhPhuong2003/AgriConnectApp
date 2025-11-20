@@ -152,7 +152,7 @@ const BuyerProfileScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back-outline" size={26} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.title}>HỒ SƠ NGƯỜI DÙNG</Text>
+        <Text style={styles.title}>Hồ sơ của tôi</Text>
         <TouchableOpacity onPress={() => navigation.navigate("Settings")}>
           <Icon name="settings-outline" size={24} color="#fff" />
         </TouchableOpacity>
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: {
-    backgroundColor: "#2e7d32",
+    backgroundColor: "#2ecc71",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

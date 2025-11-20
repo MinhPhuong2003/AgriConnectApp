@@ -10,6 +10,7 @@ import {
   Modal,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
@@ -33,8 +34,25 @@ const HomeBuyer = ({ route, navigation }) => {
   const scrollViewRef = useRef(null);
   const inputRef = useRef(null);
 
+  const [preorderSuccessModal, setPreorderSuccessModal] = useState(false);
+  const [currentPreorderProduct, setCurrentPreorderProduct] = useState(null);
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
+  };
+
+  const getEstimatedHarvest = (season) => {
+    const now = new Date();
+    const year = now.getFullYear();
+
+    const harvestMap = {
+      "Xuân": `Tháng 2 - 4/${year}`,
+      "Hạ": `Tháng 5 - 7/${year}`,
+      "Thu": `Tháng 8 - 10/${year}`,
+      "Đông": `Tháng 11/${year} - 1/${year + 1}`,
+    };
+
+    return harvestMap[season] || "Sắp có hàng";
   };
 
   useEffect(() => {
@@ -64,6 +82,58 @@ const HomeBuyer = ({ route, navigation }) => {
 
     return () => unsubscribe();
   }, []);
+
+  const addToPreorder = async (product) => {
+    const user = auth().currentUser;
+    if (!user) {
+      Alert.alert("Thông báo", "Vui lòng đăng nhập để đặt trước sản phẩm!");
+      return;
+    }
+    const cartRef = firestore().collection("carts").doc(user.uid);
+    try {
+      let finalQuantity = 1;
+      await firestore().runTransaction(async (transaction) => {
+        const cartDoc = await transaction.get(cartRef);
+        let preorders = [];
+        if (cartDoc.exists && cartDoc.data()?.preorders) {
+          preorders = cartDoc.data().preorders || [];
+          const existingIndex = preorders.findIndex(item => item.id === product.id);
+          if (existingIndex !== -1) {
+            preorders[existingIndex].quantity += 1;
+            finalQuantity = preorders[existingIndex].quantity;
+            transaction.update(cartRef, { preorders });
+            return;
+          }
+        }
+        const preorderItem = {
+          id: product.id,
+          name: product.name,
+          price: Math.round(product.price * (1 - (product.discount || 0) / 100)),
+          originalPrice: product.price,
+          discount: product.discount || 0,
+          imageUrl: product.imageUrl || PLACEHOLDER,
+          season: product.season || "Chưa xác định",
+          quantity: 1,
+          addedAt: new Date().toISOString(),
+          estimatedHarvest: getEstimatedHarvest(product.season),
+        };
+
+        preorders.push(preorderItem);
+        transaction.set(cartRef, { preorders }, { merge: true });
+        finalQuantity = 1;
+      });
+
+      setCurrentPreorderProduct({
+        ...product,
+        quantity: finalQuantity,
+      });
+      setPreorderSuccessModal(true);
+
+    } catch (error) {
+      console.error("Lỗi đặt trước:", error);
+      Alert.alert("Lỗi", "Không thể đặt trước. Vui lòng thử lại!");
+    }
+  };
 
   const addToCart = async (product) => {
     const user = auth().currentUser;
@@ -236,105 +306,96 @@ const HomeBuyer = ({ route, navigation }) => {
   });
 
   const renderProduct = ({ item }) => {
-  const discount = item.discount || 0;
-  const originalPrice = item.price || 0;
-  const discountedPrice = originalPrice * (1 - discount / 100);
+    const discount = item.discount || 0;
+    const originalPrice = item.price || 0;
+    const discountedPrice = originalPrice * (1 - discount / 100);
 
-  return (
-    <TouchableOpacity
-      style={styles.productCard}
-      onPress={() => navigation.navigate("ProductDetail", { product: item })}
-    >
-      {/* Bọc toàn bộ nội dung trong 1 View flex để đẩy nút xuống dưới cùng */}
-      <View style={{ flex: 1, justifyContent: "space-between" }}>
-        {/* Phần hình */}
-        <View style={styles.imageWrapper}>
-          <Image
-            source={{ uri: item.imageUrl || PLACEHOLDER }}
-            style={styles.productImage}
-            resizeMode="cover"
-          />
-        </View>
-
-        {/* Tên sản phẩm - để numberOfLines={2} và minHeight nếu muốn */}
-        <Text style={styles.productName} numberOfLines={2}>
-          {item.name || "Sản phẩm"}
-        </Text>
-
-        {/* Giá */}
-        <View style={styles.priceRow}>
-          <View style={styles.priceWithIcon}>
-            <Icon name="cash-outline" size={16} color="#27ae60" /> 
-            <Text style={styles.discountedPrice}>
-              {discount > 0 
-                ? `${discountedPrice.toFixed(0)}đ` 
-                : formatPrice(originalPrice)
-              }
-            </Text>
+    return (
+      <TouchableOpacity
+        style={styles.productCard}
+        onPress={() => navigation.navigate("ProductDetail", { product: item })}
+      >
+        <View style={{ flex: 1, justifyContent: "space-between" }}>
+          <View style={styles.imageWrapper}>
+            <Image
+              source={{ uri: item.imageUrl || PLACEHOLDER }}
+              style={styles.productImage}
+              resizeMode="cover"
+            />
           </View>
-          {discount > 0 && (
-            <Text style={styles.originalPrice}>
-              {formatPrice(originalPrice)}
-            </Text>
-          )}
-        </View>
 
-        {/* Khu vực */}
-        {item.growingRegion ? (
-          <View style={styles.growingRegionRow}>
-            <Icon name="location-outline" size={14} color="#27ae60" />
-            <Text style={styles.growingRegionText} numberOfLines={1}>
-              {item.growingRegion}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Mùa vụ */}
-        {item.season ? (
-          <View style={styles.seasonRowInCard}>
-            <Icon name="calendar-outline" size={14} color="#27ae60" />
-            <Text style={styles.seasonTextInCard}>
-              Mùa vụ: {item.season}
-            </Text>
-          </View>
-        ) : null}
-
-        {/* Đánh giá */}
-        <View style={styles.ratingRow}>
-          <Icon name="star" size={14} color="#ffc107" style={styles.singleStar} />
-          <Text style={styles.ratingText}>
-            {item.avgRating ? parseFloat(item.avgRating).toFixed(1) : ""}
+          <Text style={styles.productName} numberOfLines={2}>
+            {item.name || "Sản phẩm"}
           </Text>
-          <Text style={styles.reviewCount}>
-            ({item.reviewsCount || 0} đánh giá)
-          </Text>
-        </View>
 
-        {/* Nút hành động - sẽ luôn nằm dưới cùng */}
-        <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={styles.preorderButton}
-            onPress={() => alert(`Đặt trước ${item.name}`)}
-          >
-            <Icon name="time-outline" size={16} color="#ff9800" />
-            <Text style={styles.preorderText}>Đặt trước</Text>
-          </TouchableOpacity>
+          <View style={styles.priceRow}>
+            <View style={styles.priceWithIcon}>
+              <Icon name="cash-outline" size={16} color="#27ae60" />
+              <Text style={styles.discountedPrice}>
+                {discount > 0
+                  ? `${discountedPrice.toFixed(0)}đ`
+                  : formatPrice(originalPrice)}
+              </Text>
+            </View>
+            {discount > 0 && (
+              <Text style={styles.originalPrice}>
+                {formatPrice(originalPrice)}
+              </Text>
+            )}
+          </View>
 
-          <TouchableOpacity
-            style={styles.addToCartButton}
-            onPress={() => addToCart(item)}
-          >
-            <Icon name="cart-outline" size={16} color="#fff" />
-          </TouchableOpacity>
+          {item.growingRegion ? (
+            <View style={styles.growingRegionRow}>
+              <Icon name="location-outline" size={14} color="#27ae60" />
+              <Text style={styles.growingRegionText} numberOfLines={1}>
+                {item.growingRegion}
+              </Text>
+            </View>
+          ) : null}
+
+          {item.season ? (
+            <View style={styles.seasonRowInCard}>
+              <Icon name="calendar-outline" size={14} color="#27ae60" />
+              <Text style={styles.seasonTextInCard}>
+                Mùa vụ: {item.season}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.ratingRow}>
+            <Icon name="star" size={14} color="#ffc107" style={styles.singleStar} />
+            <Text style={styles.ratingText}>
+              {item.avgRating ? parseFloat(item.avgRating).toFixed(1) : ""}
+            </Text>
+            <Text style={styles.reviewCount}>
+              ({item.reviewsCount || 0} đánh giá)
+            </Text>
+          </View>
+
+          <View style={styles.buttonRow}>
+            <TouchableOpacity
+              style={styles.preorderButton}
+              onPress={() => addToPreorder(item)}
+            >
+              <Icon name="time-outline" size={16} color="#ff9800" />
+              <Text style={styles.preorderText}>Đặt trước</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addToCartButton}
+              onPress={() => addToCart(item)}
+            >
+              <Icon name="cart-outline" size={16} color="#fff" />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
-};
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
+      {/* HEADER – ĐÃ BỎ ICON ĐẶT TRƯỚC */}
       <View style={styles.header}>
         <View style={styles.searchRow}>
           {(isCategoryFilterMode || isSearchMode) && (
@@ -375,6 +436,7 @@ const HomeBuyer = ({ route, navigation }) => {
             )}
           </TouchableOpacity>
 
+          {/* Chỉ còn giỏ hàng và chat */}
           <TouchableOpacity
             style={styles.cartIconContainer}
             onPress={() => navigation.navigate("Cart")}
@@ -396,8 +458,9 @@ const HomeBuyer = ({ route, navigation }) => {
         </View>
       </View>
 
+      {/* PHẦN CÒN LẠI GIỮ NGUYÊN */}
       <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-        {/* === TRANG CHỦ === */}
+        {/* ... toàn bộ phần dưới giữ nguyên như cũ ... */}
         {!(isSearchMode || isCategoryFilterMode) && (
           <>
             <View style={styles.bannerWrapper}>
@@ -458,8 +521,7 @@ const HomeBuyer = ({ route, navigation }) => {
                 contentContainerStyle={{ paddingHorizontal: 4 }}
               />
             </View>
-            
-            {/* GỢI Ý MÙA NỔI BẬT – SIÊU ĐẸP, ĐÚNG VỊ TRÍ BẠN MUỐN */}
+
             <View style={styles.seasonalTipContainer}>
               <Icon name="sparkles" size={22} color="#fff" />
               <Text style={styles.seasonalTipText}>
@@ -467,7 +529,7 @@ const HomeBuyer = ({ route, navigation }) => {
               </Text>
               <Icon name="leaf" size={22} color="#fff" />
             </View>
-            
+
             <View style={styles.seasonRow}>
               <Text style={styles.sectionTitle}>Sản phẩm theo mùa</Text>
               <TouchableOpacity
@@ -507,7 +569,6 @@ const HomeBuyer = ({ route, navigation }) => {
           </>
         )}
 
-        {/* === TAB DANH MỤC KHI LỌC === */}
         {isCategoryFilterMode && !isSearchMode && (
           <View style={styles.categorySection}>
             <FlatList
@@ -534,7 +595,6 @@ const HomeBuyer = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* === DANH SÁCH SẢN PHẨM === */}
         {!isSearchMode || searchQuery ? (
           loading ? (
             <View style={{ marginTop: 30, alignItems: "center" }}>
@@ -566,6 +626,80 @@ const HomeBuyer = ({ route, navigation }) => {
           </View>
         )}
       </ScrollView>
+      {/* Modal Đặt trước thành công - XỊN SÒ */}
+      <Modal
+        transparent
+        visible={preorderSuccessModal}
+        animationType="none"
+        onRequestClose={() => setPreorderSuccessModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[
+            styles.successModalContainer,
+            {
+              transform: [
+                {
+                  scale: preorderSuccessModal ? 1 : 0.8,
+                },
+              ],
+              opacity: preorderSuccessModal ? 1 : 0,
+            }
+          ]}>
+            {/* Icon tick xanh */}
+            <View style={styles.successIcon}>
+              <Icon name="checkmark-circle" size={60} color="#27ae60" />
+            </View>
+
+            <Text style={styles.successTitle}>
+              Đặt trước thành công!
+            </Text>
+
+            {currentPreorderProduct && (
+              <View style={styles.successProductInfo}>
+                <Image
+                  source={{ uri: currentPreorderProduct.imageUrl || PLACEHOLDER }}
+                  style={styles.successProductImage}
+                />
+                <View style={styles.successProductDetails}>
+                  <Text style={styles.successProductName} numberOfLines={2}>
+                    {currentPreorderProduct.name}
+                  </Text>
+                  {currentPreorderProduct.season && (
+                    <Text style={styles.successSeasonText}>
+                      Mùa: {currentPreorderProduct.season}
+                    </Text>
+                  )}
+                  <Text style={styles.successHarvestText}>
+                    Dự kiến thu hoạch: {currentPreorderProduct.estimatedHarvest || getEstimatedHarvest(currentPreorderProduct.season)}
+                  </Text>
+                  <Text style={styles.successQuantityText}>
+                    Số lượng: {currentPreorderProduct.quantity} kg
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.successButtons}>
+              <TouchableOpacity
+                style={styles.successCloseButton}
+                onPress={() => setPreorderSuccessModal(false)}
+              >
+                <Text style={styles.successCloseText}>Đóng</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.successViewButton}
+                onPress={() => {
+                  setPreorderSuccessModal(false);
+                  navigation.navigate("Preorder");
+                }}
+              >
+                <Text style={styles.successViewText}>Xem chi tiết</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -607,6 +741,7 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
   chatIconContainer: { padding: 8, borderRadius: 30 },
+  // ... toàn bộ styles còn lại giữ nguyên như trước ...
   bannerWrapper: { marginTop: 0, marginBottom: 16, marginHorizontal: -16, paddingHorizontal: 0 },
   bannerContainer: { height: 160, borderRadius: 0, overflow: "hidden", elevation: 6 },
   bannerImage: { width: "100%", height: "100%" },
@@ -638,11 +773,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "space-between",
   },
-  productWrapper: {
-    width: "48%",
-    marginBottom: 16,
-    justifyContent: "flex-start",
-  },
+  productWrapper: { width: "48%", marginBottom: 16, justifyContent: "flex-start" },
   imageWrapper: { width: "100%", height: 100, borderRadius: 12, overflow: "hidden", marginBottom: 10, backgroundColor: "#f0f0f0" },
   productImage: { width: "100%", height: "100%" },
   productName: { fontSize: 15, fontWeight: "600", color: "#333", minHeight: 15, textAlign: "center", height: 44 },
@@ -662,34 +793,11 @@ const styles = StyleSheet.create({
   categoryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   locationButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#e8f5e9", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, gap: 4 },
   locationText: { fontSize: 13, color: "#2e7d32", fontWeight: "600" },
-  growingRegionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 4,
-  },
-  growingRegionText: {
-    fontSize: 13,
-    color:"#27ae60",
-    fontWeight: "600",
-    flex: 1,
-  },
-  seasonRowInCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 6,
-    gap: 4,
-  },
-  seasonTextInCard: {
-    fontSize: 13,
-    color: "#27ae60",
-    fontWeight: "600",
-  },
-  priceWithIcon: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
+  growingRegionRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
+  growingRegionText: { fontSize: 13, color: "#27ae60", fontWeight: "600", flex: 1 },
+  seasonRowInCard: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
+  seasonTextInCard: { fontSize: 13, color: "#27ae60", fontWeight: "600" },
+  priceWithIcon: { flexDirection: "row", alignItems: "center", gap: 4 },
   seasonalTipContainer: {
     backgroundColor: "#27ae60",
     marginHorizontal: 16,
@@ -715,4 +823,92 @@ const styles = StyleSheet.create({
     flex: 1,
     letterSpacing: 0.4,
   },
+  // Modal đặt trước thành công - đẹp lung linh
+successModalContainer: {
+  backgroundColor: "#fff",
+  marginHorizontal: 30,
+  borderRadius: 20,
+  padding: 20,
+  alignItems: "center",
+  elevation: 10,
+  shadowColor: "#000",
+  shadowOffset: { width: 0, height: 5 },
+  shadowOpacity: 0.3,
+  shadowRadius: 10,
+},
+successIcon: {
+  marginBottom: 10,
+},
+successTitle: {
+  fontSize: 20,
+  fontWeight: "bold",
+  color: "#27ae60",
+  marginBottom: 16,
+},
+successProductInfo: {
+  flexDirection: "row",
+  alignItems: "center",
+  marginBottom: 20,
+  width: "100%",
+},
+successProductImage: {
+  width: 80,
+  height: 80,
+  borderRadius: 12,
+  marginRight: 12,
+},
+successProductDetails: {
+  flex: 1,
+},
+successProductName: {
+  fontSize: 16,
+  fontWeight: "600",
+  color: "#333",
+},
+successSeasonText: {
+  fontSize: 14,
+  color: "#27ae60",
+  marginTop: 4,
+},
+successHarvestText: {
+  fontSize: 13,
+  color: "#666",
+  marginTop: 4,
+  fontStyle: "italic",
+},
+successQuantityText: {
+  fontSize: 14,
+  color: "#e67e22",
+  fontWeight: "bold",
+  marginTop: 6,
+},
+successButtons: {
+  flexDirection: "row",
+  gap: 12,
+  marginTop: 10,
+},
+successCloseButton: {
+  flex: 1,
+  paddingVertical: 12,
+  borderRadius: 12,
+  backgroundColor: "#f0f0f0",
+  alignItems: "center",
+},
+successCloseText: {
+  fontSize: 16,
+  color: "#666",
+  fontWeight: "600",
+},
+successViewButton: {
+  flex: 1,
+  paddingVertical: 12,
+  borderRadius: 12,
+  backgroundColor: "#27ae60",
+  alignItems: "center",
+},
+successViewText: {
+  fontSize: 16,
+  color: "#fff",
+  fontWeight: "bold",
+},
 });
