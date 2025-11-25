@@ -178,20 +178,14 @@ const FarmerProfileScreen = ({ navigation }) => {
       <View style={styles.infoCards}>
         <View style={styles.infoCard}>
           <Icon name="star" size={20} color="#fbc02d" />
-          <Text style={styles.infoText}>{userData.rating?.toFixed(1) || 0} điểm đánh giá</Text>
+          <Text style={styles.infoText}>{userData.rating?.toFixed(1) || 0} đánh giá</Text>
         </View>
-        <View style={styles.infoCard}>
-          <Icon name="trophy" size={20} color="#ff9800" />
-          <Text style={styles.infoText}>{userData.points || 0} điểm</Text>
-        </View>
+        
         <View style={styles.infoCard}>
           <Icon name="call-outline" size={20} color="#2e7d32" />
           <Text style={styles.infoText}>{userData.phone || "Chưa có số"}</Text>
         </View>
-        <View style={styles.infoCard}>
-          <Icon name="location-outline" size={20} color="#2e7d32" />
-          <Text style={styles.infoText}>{userData.address || "Chưa có địa chỉ"}</Text>
-        </View>
+        
         <View style={styles.infoCard}>
           <Icon name="bag-outline" size={20} color="#2e7d32" />
           <Text style={styles.infoText}>Sản phẩm bán: {products.length}</Text>
@@ -202,35 +196,6 @@ const FarmerProfileScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* Products Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Sản phẩm đang bán</Text>
-        {products.length === 0 ? (
-          <Text style={styles.emptyText}>Chưa có sản phẩm</Text>
-        ) : (
-          <FlatList
-            data={products}
-            horizontal
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.productCard}>
-                <Image
-                  source={{ uri: item.imageUrl }}
-                  style={styles.productImage}
-                  onError={(e) => console.log("Lỗi tải ảnh sản phẩm:", e.nativeEvent.error)}
-                />
-                <Text style={styles.productName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.productPrice}>
-                  {item.price} đ/{item.unit}
-                </Text>
-              </View>
-            )}
-          />
-        )}
-      </View>
-
       {/* Actions - ĐÃ THÊM NÚT QUẢN LÝ ĐƠN HÀNG */}
       <View style={styles.actions}>
         <TouchableOpacity
@@ -238,23 +203,7 @@ const FarmerProfileScreen = ({ navigation }) => {
           onPress={() => navigation.navigate("MyProducts")}
         >
           <Icon name="leaf-outline" size={22} color="#2e7d32" />
-          <Text style={styles.actionText}>Sản phẩm của tôi</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => navigation.navigate("EditProfile")}
-        >
-          <Icon name="create-outline" size={22} color="#2e7d32" />
-          <Text style={styles.actionText}>Chỉnh sửa hồ sơ</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => navigation.navigate("OrderHistory")}
-        >
-          <Icon name="receipt-outline" size={22} color="#2e7d32" />
-          <Text style={styles.actionText}>Lịch sử đơn hàng</Text>
+          <Text style={styles.actionText}>Quản lý nông sản</Text>
         </TouchableOpacity>
 
         {/* NÚT MỚI: QUẢN LÝ ĐƠN HÀNG */}
@@ -265,6 +214,15 @@ const FarmerProfileScreen = ({ navigation }) => {
           <Icon name="cart-outline" size={22} color="#2e7d32" />
           <Text style={styles.actionText}>Quản lý đơn hàng</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => navigation.navigate("EditProfile")}
+        >
+          <Icon name="create-outline" size={22} color="#2e7d32" />
+          <Text style={styles.actionText}>Chỉnh sửa hồ sơ</Text>
+        </TouchableOpacity>
+
       </View>
 
       {/* Logout */}

@@ -18,13 +18,11 @@ const PLACEHOLDER = "https://cdn-icons-png.flaticon.com/512/4202/4202843.png";
 const ProductDetailScreen = ({ route, navigation }) => {
   const { product } = route.params || {};
 
-  const [selectedWeight, setSelectedWeight] = useState("5kg");
-  const weights = ["5kg", "7kg", "10kg"];
   const discount = product?.discount || 0;
   const originalPrice = product?.price || 0;
   const discountedPrice = originalPrice * (1 - discount / 100);
   const [cartCount, setCartCount] = useState(0);
-  // === TÌM KIẾM ===
+
   const [searchQuery, setSearchQuery] = useState("");
   const [finalSearchQuery, setFinalSearchQuery] = useState("");
   const [isSearchMode, setIsSearchMode] = useState(false);
@@ -95,14 +93,13 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
         transaction.set(cartRef, { items: cartItems }, { merge: true });
       });
-      alert("Đã thêm vào giỏ hàng!");
     } catch (error) {
       console.error("Lỗi thêm vào giỏ:", error);
       alert("Không thể thêm vào giỏ. Vui lòng thử lại.");
     }
   };
 
-  // === LẤY SẢN PHẨM ===
+  // === LẤY TẤT CẢ SẢN PHẨM CHO TÌM KIẾM ===
   useEffect(() => {
     setLoading(true);
     const q = firestore()
@@ -138,9 +135,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
   const handleSearch = () => {
     const trimmed = searchQuery.trim();
-    if (trimmed) {
-      setFinalSearchQuery(trimmed);
-    }
+    if (trimmed) setFinalSearchQuery(trimmed);
   };
 
   const handleClearSearch = () => {
@@ -176,7 +171,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
     },
   ];
 
-  // === HEADER CHI TIẾT SẢN PHẨM ===
   const ListHeader = () => (
     <>
       <View style={styles.imageContainer}>
@@ -207,13 +201,11 @@ const ProductDetailScreen = ({ route, navigation }) => {
         {product?.name || "Sản phẩm"}
       </Text>
 
-      {/* === MÔ TẢ SẢN PHẨM - HIỂN THỊ ĐẦY ĐỦ === */}
+      {/* MÔ TẢ SẢN PHẨM */}
       {product?.description ? (
         <View style={styles.descriptionContainer}>
           <Text style={styles.descriptionTitle}>Mô tả sản phẩm</Text>
-          <Text style={styles.descriptionText}>
-            {product.description}
-          </Text>
+          <Text style={styles.descriptionText}>{product.description}</Text>
         </View>
       ) : null}
 
@@ -228,31 +220,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
           <Text style={styles.reviewCount}>
             ({product?.reviewsCount || 357} đánh giá)
           </Text>
-        </View>
-      </View>
-
-      <View style={styles.optionSection}>
-        <Text style={styles.optionTitle}>Cân nặng</Text>
-        <View style={styles.weightOptions}>
-          {weights.map((weight) => (
-            <TouchableOpacity
-              key={weight}
-              style={[
-                styles.weightButton,
-                selectedWeight === weight && styles.weightButtonActive,
-              ]}
-              onPress={() => setSelectedWeight(weight)}
-            >
-              <Text
-                style={[
-                  styles.weightText,
-                  selectedWeight === weight && styles.weightTextActive,
-                ]}
-              >
-                {weight}
-              </Text>
-            </TouchableOpacity>
-          ))}
         </View>
       </View>
 
@@ -345,26 +312,16 @@ const ProductDetailScreen = ({ route, navigation }) => {
       <View style={styles.header}>
         <View style={styles.searchRow}>
           {isSearchMode ? (
-            <TouchableOpacity
-              onPress={handleBackToDetail}
-              style={styles.backButtonContainer}
-            >
+            <TouchableOpacity onPress={handleBackToDetail} style={styles.backButtonContainer}>
               <Icon name="arrow-back" size={26} color="#fff" />
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.backButtonContainer}
-            >
+            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButtonContainer}>
               <Icon name="arrow-back" size={26} color="#fff" />
             </TouchableOpacity>
           )}
 
-          <TouchableOpacity
-            style={styles.searchBox}
-            activeOpacity={1}
-            onPress={enterSearchMode}
-          >
+          <TouchableOpacity style={styles.searchBox} activeOpacity={1} onPress={enterSearchMode}>
             <Icon name="search" size={20} color="#666" />
             <TextInput
               ref={inputRef}
@@ -410,7 +367,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
         </View>
       </View>
 
-      {/* NỘI DUNG */}
+      {/* NỘI DUNG CHÍNH */}
       {isSearchMode && !finalSearchQuery ? (
         <View style={styles.searchPlaceholder}>
           <Icon name="search" size={60} color="#ccc" />
@@ -454,7 +411,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
         />
       )}
 
-      {/* BOTTOM BAR - ẨN KHI TÌM KIẾM */}
+      {/* BOTTOM BAR - CHỈ HIỆN KHI KHÔNG TÌM KIẾM */}
       {!isSearchMode && (
         <View style={styles.bottomBar}>
           <TouchableOpacity style={styles.shopBtn}>
@@ -491,7 +448,7 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  backButtonContainer: { padding: 4, marginRight: 2, justifyContent: "center", alignItems: "center" },
+  backButtonContainer: { padding: 4, marginRight: 2 },
   searchBox: {
     flex: 1,
     flexDirection: "row",
@@ -529,7 +486,8 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
   chatIconContainer: { padding: 8, borderRadius: 30 },
-  // CHI TIẾT
+
+  // CHI TIẾT SẢN PHẨM
   imageContainer: { height: 300 },
   productImage: { width: "100%", height: "100%" },
   priceSection: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginTop: 12, gap: 10 },
@@ -538,7 +496,7 @@ const styles = StyleSheet.create({
   discountBadge: { backgroundColor: "#ee4d2d", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   discountText: { color: "#fff", fontSize: 12, fontWeight: "bold" },
   productName: { fontSize: 18, color: "#333", paddingHorizontal: 16, marginTop: 8, lineHeight: 24 },
-  // MÔ TẢ SẢN PHẨM - FULL NỘI DUNG
+
   descriptionContainer: {
     paddingHorizontal: 16,
     marginTop: 12,
@@ -547,31 +505,17 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
   },
-  descriptionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  descriptionText: {
-    fontSize: 14,
-    color: "#444",
-    lineHeight: 22,
-    textAlign: "justify",
-  },
+  descriptionTitle: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 8 },
+  descriptionText: { fontSize: 14, color: "#444", lineHeight: 22, textAlign: "justify" },
+
   ratingSection: { paddingHorizontal: 16, marginTop: 8 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   avgRating: { fontSize: 16, fontWeight: "600", color: "#333" },
   reviewCount: { fontSize: 14, color: "#777" },
-  optionSection: { paddingHorizontal: 16, marginTop: 20 },
-  optionTitle: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 10 },
-  weightOptions: { flexDirection: "row", gap: 10 },
-  weightButton: { borderWidth: 1, borderColor: "#ddd", paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  weightButtonActive: { borderColor: "#ee4d2d", backgroundColor: "#fff5f5" },
-  weightText: { fontSize: 14, color: "#555" },
-  weightTextActive: { color: "#ee4d2d", fontWeight: "600" },
+
   reviewsTitleContainer: { paddingHorizontal: 16, marginTop: 20, marginBottom: 12 },
   reviewsTitle: { fontSize: 16, fontWeight: "bold", color: "#333" },
+
   reviewItem: { backgroundColor: "#f9f9f9", padding: 12, borderRadius: 12, marginBottom: 12, marginHorizontal: 16 },
   reviewHeader: { flexDirection: "row", gap: 10, marginBottom: 8 },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#2e7d32", justifyContent: "center", alignItems: "center" },
@@ -581,12 +525,14 @@ const styles = StyleSheet.create({
   reviewComment: { fontSize: 14, color: "#555", lineHeight: 20, marginBottom: 8 },
   reviewImage: { width: "100%", height: 120, borderRadius: 8, marginBottom: 8 },
   reviewDate: { fontSize: 12, color: "#999" },
+
   // TÌM KIẾM
   searchPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 },
   searchPlaceholderText: { marginTop: 16, fontSize: 16, color: "#999", textAlign: "center" },
   loadingBox: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyBox: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 },
   emptyText: { marginTop: 16, fontSize: 16, color: "#999", textAlign: "center" },
+
   // KẾT QUẢ TÌM KIẾM
   resultCard: {
     backgroundColor: "#fff",
@@ -596,7 +542,6 @@ const styles = StyleSheet.create({
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
     width: "48%",
     marginBottom: 12,
   },
@@ -608,6 +553,7 @@ const styles = StyleSheet.create({
   resultOrigPrice: { fontSize: 13, color: "#999", textDecorationLine: "line-through" },
   resultRatingRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 },
   resultRating: { fontSize: 13, color: "#333", fontWeight: "600" },
+
   // BOTTOM BAR
   bottomBar: {
     position: "absolute",
@@ -642,7 +588,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     elevation: 4,
   },
-  addToCartText: { color: "#2ecc71", fontWeight: "bold", fontSize: 15, textAlign: "center", lineHeight: 48, height: 48 },
+  addToCartText: { color: "#2ecc71", fontWeight: "bold", fontSize: 15 },
   buyNowBtn: {
     flex: 2.3,
     height: 48,
@@ -653,5 +599,5 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
     elevation: 4,
   },
-  buyNowText: { color: "#fff", fontWeight: "bold", fontSize: 15, textAlign: "center", lineHeight: 48, height: 48 },
+  buyNowText: { color: "#fff", fontWeight: "bold", fontSize: 15 },
 });

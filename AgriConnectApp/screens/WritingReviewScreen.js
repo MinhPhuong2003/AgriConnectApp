@@ -54,7 +54,7 @@ const WritingReviewScreen = ({ navigation, route }) => {
               };
             }
 
-            // Kiểm tra đánh giá cho sản phẩm
+            // Kiểm tra đánh giá đã tồn tại chưa
             const reviewSnapshot = await firestore()
               .collection("reviews")
               .where("orderId", "==", orderId)
@@ -183,17 +183,15 @@ const WritingReviewScreen = ({ navigation, route }) => {
           farmerRating: review.farmerRating,
           comment: review.comment,
           createdAt: firestore.FieldValue.serverTimestamp(),
-        });
+        }, { merge: true });
 
-        // --- Tích điểm cho nông dân ---
-        if (review.sellerId) {
+        // Tích điểm cho nông dân
+        if (review.sellerId && review.sellerId !== "unknown") {
           const farmerRef = firestore().collection("users").doc(review.sellerId);
-          const totalPoints = review.rating + review.farmerRating; // tổng điểm = sản phẩm + nông dân
+          const totalPoints = review.rating + review.farmerRating;
           batch.set(
             farmerRef,
-            {
-              totalPoints: firestore.FieldValue.increment(totalPoints),
-            },
+            { totalPoints: firestore.FieldValue.increment(totalPoints) },
             { merge: true }
           );
         }
@@ -202,6 +200,7 @@ const WritingReviewScreen = ({ navigation, route }) => {
       const orderRef = firestore().collection("orders").doc(orderId);
       batch.update(orderRef, { reviewed: true });
       await batch.commit();
+
       Alert.alert("Thành công", "Đánh giá của bạn đã được gửi.", [
         { text: "OK", onPress: () => navigation.goBack() },
       ]);
@@ -254,9 +253,7 @@ const WritingReviewScreen = ({ navigation, route }) => {
     );
   }
 
-  if (!order || reviews.length === 0) {
-    return null;
-  }
+  if (!order || reviews.length === 0) return null;
 
   return (
     <View style={styles.container}>
@@ -266,9 +263,7 @@ const WritingReviewScreen = ({ navigation, route }) => {
         </TouchableOpacity>
         <Text style={styles.title}>Đánh giá sản phẩm</Text>
         <TouchableOpacity onPress={handleSubmit} disabled={submitting}>
-          <Text
-            style={[styles.submitText, submitting && styles.submitTextDisabled]}
-          >
+          <Text style={[styles.submitText, submitting && styles.submitTextDisabled]}>
             Gửi
           </Text>
         </TouchableOpacity>
@@ -290,20 +285,21 @@ const WritingReviewScreen = ({ navigation, route }) => {
               <Text style={styles.farmerName}>{farmer.farmerName}</Text>
             </View>
 
+            {/* Đánh giá nông dân */}
             <View style={styles.ratingSection}>
               <Text style={styles.sectionTitle}>Đánh giá nông dân</Text>
               {renderStarRating(
                 farmer.sellerId,
                 farmer.farmerRating,
                 "farmer",
-                (id, rating, type) =>
-                  handleRating(farmer.sellerId, null, rating, type),
+                (id, rating, type) => handleRating(farmer.sellerId, null, rating, type),
                 farmer.products.some((p) => p.isReviewed)
               )}
             </View>
 
             {farmer.products.map((product) => (
               <View key={product.productId} style={styles.productItem}>
+                {/* Thông tin sản phẩm */}
                 <View style={styles.productCard}>
                   <Image
                     source={{
@@ -316,25 +312,24 @@ const WritingReviewScreen = ({ navigation, route }) => {
                   />
                   <View style={styles.productInfo}>
                     <Text style={styles.productName} numberOfLines={2}>
-                      {product.name ||
-                        "DECAL 1M X 45CM Giấy dán tường có sắn keo m..."}
+                      {product.name}
                     </Text>
-                    <Text style={styles.category}>Phân loại: XI MĂNG</Text>
                   </View>
                 </View>
 
+                {/* Đánh giá chất lượng sản phẩm */}
                 <View style={styles.ratingSection}>
                   <Text style={styles.sectionTitle}>Chất lượng sản phẩm</Text>
                   {renderStarRating(
                     product.productId,
                     product.rating,
                     "product",
-                    (id, rating, type) =>
-                      handleRating(farmer.sellerId, id, rating, type),
+                    (id, rating, type) => handleRating(farmer.sellerId, id, rating, type),
                     product.isReviewed
                   )}
                 </View>
 
+                {/* Nhận xét */}
                 <View style={styles.reviewSection}>
                   <Text style={styles.sectionTitle}>
                     Hãy chia sẻ nhận xét cho sản phẩm này
@@ -355,12 +350,11 @@ const WritingReviewScreen = ({ navigation, route }) => {
               </View>
             ))}
 
-            {farmerIndex < reviews.length - 1 && (
-              <View style={styles.farmerSeparator} />
-            )}
+            {farmerIndex < reviews.length - 1 && <View style={styles.farmerSeparator} />}
           </View>
         ))}
 
+        {/* Nút thêm hình/video (bạn có thể bỏ nếu không dùng) */}
         <View style={styles.mediaButtons}>
           <TouchableOpacity style={styles.mediaButton}>
             <Icon name="camera" size={20} color="#fff" />
@@ -433,8 +427,7 @@ const styles = StyleSheet.create({
   productImage: { width: 50, height: 50, borderRadius: 4, marginRight: 10 },
   productInfo: { flex: 1 },
   productName: { fontSize: 14, color: "#212121", fontWeight: "500" },
-  category: { fontSize: 12, color: "#757575", marginTop: 4 },
-  ratingSection: { marginBottom: 16 },
+  ratingSection: { marginTop: 12, marginBottom: 16 },
   sectionTitle: {
     fontSize: 14,
     color: "#757575",

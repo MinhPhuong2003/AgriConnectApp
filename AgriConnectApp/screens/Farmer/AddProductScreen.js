@@ -23,28 +23,29 @@ const AddProductScreen = ({ navigation }) => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [unit, setUnit] = useState("");
   const [season, setSeason] = useState("");
   const [region, setRegion] = useState("");
   const [category, setCategory] = useState("");
-  const [growingRegion, setGrowingRegion] = useState(""); // THÊM MỚI: Khu vực địa lý (tự do nhập)
+  const [growingRegion, setGrowingRegion] = useState("");
   const [image, setImage] = useState(null);
   const [loading, setLoading] = useState(false);
+  // Modal
   const [isSeasonModalVisible, setSeasonModalVisible] = useState(false);
   const [isUnitModalVisible, setUnitModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
+  // Vị trí
   const [location, setLocation] = useState(null);
   const mapRef = useRef(null);
-
-  // Kiểm tra đăng nhập khi component mount
+  // Kiểm tra đăng nhập
   useEffect(() => {
     if (!auth().currentUser) {
       Alert.alert("Lỗi", "Vui lòng đăng nhập trước khi thêm sản phẩm!");
-      navigation.navigate('Login');
+      navigation.navigate("Login");
     }
   }, [navigation]);
-
-  // Hàm yêu cầu quyền vị trí
+  // === QUYỀN VÀ LẤY VỊ TRÍ ===
   const requestLocationPermission = async () => {
     if (Platform.OS !== "android") return true;
     try {
@@ -52,7 +53,7 @@ const AddProductScreen = ({ navigation }) => {
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         {
           title: "Cấp quyền vị trí",
-          message: "Ứng dụng cần vị trí để lưu thông tin sản phẩm",
+          message: "Ứng dụng cần truy cập vị trí để lưu thông tin sản phẩm",
           buttonPositive: "Cho phép",
           buttonNegative: "Từ chối",
         }
@@ -64,41 +65,31 @@ const AddProductScreen = ({ navigation }) => {
     }
   };
 
-  // Hàm lấy vị trí hiện tại
   const getCurrentLocation = () => {
     return new Promise((resolve, reject) => {
       Geolocation.getCurrentPosition(
         (position) => resolve(position.coords),
         (error) => reject(error),
-        {
-          enableHighAccuracy: true,
-          timeout: 20000,
-          maximumAge: 10000,
-        }
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 }
       );
     });
   };
 
-  // Hàm reverse geocode để lấy địa chỉ từ tọa độ
   const reverseGeocode = async (lat, lng) => {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`;
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": "ReactNativeApp/1.0" },
+        headers: { "User-Agent": "NongSanApp/1.0" },
       });
       const data = await res.json();
-      if (data?.display_name) {
-        return data.display_name;
-      } else {
-        throw new Error("Không xác định được địa chỉ");
-      }
+      return data?.display_name || "Không xác định được địa chỉ";
     } catch (error) {
-      console.error("Nominatim error:", error);
-      throw error;
+      console.error("Reverse geocoding error:", error);
+      return "Không thể lấy địa chỉ";
     }
   };
 
-  // Lấy vị trí khi component mount
+  // Lấy vị trí khi mở màn hình
   useEffect(() => {
     const fetchLocation = async () => {
       try {
@@ -110,21 +101,17 @@ const AddProductScreen = ({ navigation }) => {
         }
         const coords = await getCurrentLocation();
         setLocation(coords);
-        const fullAddress = await reverseGeocode(coords.latitude, coords.longitude);
-        setRegion(fullAddress);
-        if (mapRef.current) {
-          mapRef.current.animateToRegion(
-            {
-              latitude: coords.latitude,
-              longitude: coords.longitude,
-              latitudeDelta: 0.005,
-              longitudeDelta: 0.005,
-            },
-            1000
-          );
-        }
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        setRegion(address);
+
+        mapRef.current?.animateToRegion({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        }, 1000);
       } catch (error) {
-        console.error("Lỗi lấy vị trí:", error.message);
+        console.error("Lỗi lấy vị trí:", error);
         Alert.alert("Lỗi", "Không thể lấy vị trí hiện tại");
       } finally {
         setLoading(false);
@@ -133,61 +120,75 @@ const AddProductScreen = ({ navigation }) => {
     fetchLocation();
   }, []);
 
-  // Xử lý khi vùng bản đồ thay đổi
   const handleRegionChange = async (region) => {
     const newCoords = {
       latitude: region.latitude,
       longitude: region.longitude,
     };
     setLocation(newCoords);
-    try {
-      const fullAddress = await reverseGeocode(newCoords.latitude, newCoords.longitude);
-      setRegion(fullAddress);
-    } catch (error) {
-      console.error("Lỗi reverse geocoding:", error);
-      setRegion("Không thể lấy địa chỉ");
-    }
+    const address = await reverseGeocode(newCoords.latitude, newCoords.longitude);
+    setRegion(address);
   };
 
-  // Chọn ảnh
+  // === CHỌN ẢNH ===
   const pickImage = async () => {
     const result = await launchImageLibrary({
       mediaType: "photo",
-      includeBase64: false,
+      quality: 0.8,
     });
-    if (!result.didCancel && result.assets && result.assets.length > 0) {
+    if (!result.didCancel && result.assets?.[0]?.uri) {
       setImage(result.assets[0].uri);
     }
   };
 
-  // Thêm sản phẩm vào Firestore
+  // === THÊM SẢN PHẨM ===
   const handleAddProduct = async () => {
     if (!auth().currentUser) {
-      Alert.alert("Lỗi", "Vui lòng đăng nhập trước khi thêm sản phẩm!");
+      Alert.alert("Lỗi", "Vui lòng đăng nhập!");
       return;
     }
 
-    // KIỂM TRA THÊM growingRegion
-    if (!name || !price || !season || !region || !unit || !image || !category || !location || !growingRegion.trim()) {
-      Alert.alert("Lỗi", "Vui lòng điền đầy đủ thông tin, bao gồm cả khu vực địa lý (nơi trồng)!");
+    // Kiểm tra đầy đủ thông tin
+    if (!name.trim() || !price || !quantity || !unit || !season || !category || !image || !location || !growingRegion.trim()) {
+      Alert.alert("Lỗi", "Vui lòng điền đầy đủ tất cả các trường bắt buộc!");
       return;
     }
 
-    const userId = auth().currentUser.uid;
+    const priceNum = parseFloat(price);
+    const qtyNum = parseFloat(quantity);
+
+    if (isNaN(priceNum) || priceNum <= 0) {
+      Alert.alert("Lỗi", "Giá phải là số lớn hơn 0!");
+      return;
+    }
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      Alert.alert("Lỗi", "Số lượng tồn kho phải là số lớn hơn 0!");
+      return;
+    }
+
+    const user = auth().currentUser;
 
     try {
       setLoading(true);
+
       await firestore().collection("products").add({
-        name,
-        description,
-        price: parseFloat(price),
+        name: name.trim(),
+        description: description.trim() || "",
+        price: priceNum,
+        quantity: qtyNum,
+        stock: qtyNum,
         unit,
         imageUrl: image,
         season,
         region,
         category,
-        growingRegion: growingRegion.trim(), // THÊM MỚI: Lưu khu vực địa lý
-        sellerId: userId,
+        growingRegion: growingRegion.trim(),
+
+        farmerId: user.uid,
+        farmerName: user.displayName || "Nông dân",
+        farmerAvatarUrl: user.photoURL || null,
+
+        sellerId: user.uid,
         location: {
           latitude: location.latitude,
           longitude: location.longitude,
@@ -199,83 +200,150 @@ const AddProductScreen = ({ navigation }) => {
         reviewsCount: 0,
       });
 
-      Alert.alert(
-        "Thành công",
-        "Cập nhật sản phẩm thành công!",
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              navigation.goBack();
-            },
-          },
-        ],
-        { cancelable: false }
-      );
+      Alert.alert("Thành công", "Sản phẩm đã được thêm!", [
+        { text: "OK", onPress: () => navigation.goBack() }
+      ]);
     } catch (error) {
       console.error("Lỗi thêm sản phẩm:", error);
-      Alert.alert("Lỗi", error.message || "Không thể thêm sản phẩm.");
+      Alert.alert("Lỗi", "Không thể thêm sản phẩm: " + error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Dữ liệu chọn
   const seasons = ["Xuân", "Hạ", "Thu", "Đông"];
-  const units = ["kg", "bó", "thùng"];
+  const units = ["kg", "bó", "thùng", "tạ", "tấn", "quả", "chục"];
   const categories = ["Rau củ", "Trái cây", "Hạt giống", "Nông sản khô"];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={{ alignItems: "center", marginBottom: 20 }}>
+      {/* Ảnh sản phẩm */}
+      <View style={styles.imageSection}>
         <TouchableOpacity onPress={pickImage} style={styles.imageBox}>
           {image ? (
             <Image source={{ uri: image }} style={styles.previewImage} />
           ) : (
-            <Icon name="image-outline" size={28} color="#ccc" />
+            <View style={{ alignItems: "center" }}>
+              <Icon name="image-outline" size={40} color="#aaa" />
+              <Text style={{ marginTop: 8, color: "#888", fontSize: 12 }}>Thêm ảnh</Text>
+            </View>
           )}
         </TouchableOpacity>
-        <Text style={{ fontSize: 14, color: "#666", marginTop: 6 }}>
-          Chọn ảnh sản phẩm
-        </Text>
+        <Text style={styles.imageHint}>Bắt buộc - Chọn ảnh sản phẩm</Text>
       </View>
 
-      <Text style={styles.label}>Tên sản phẩm</Text>
-      <TextInput style={styles.input} value={name} onChangeText={setName} />
+      <Text style={styles.label}>Tên sản phẩm *</Text>
+      <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="VD: Cà chua sạch Đà Lạt" />
 
-      <Text style={styles.label}>Mô tả</Text>
+      <Text style={styles.label}>Mô tả (không bắt buộc)</Text>
       <TextInput
         style={[styles.input, styles.textarea]}
         multiline
         value={description}
         onChangeText={setDescription}
+        placeholder="Nói về chất lượng, nguồn gốc, cách trồng..."
       />
 
-      <Text style={styles.label}>Giá (VNĐ)</Text>
+      <Text style={styles.label}>Giá bán (VNĐ / {unit || "đơn vị"}) *</Text>
       <TextInput
         style={styles.input}
         value={price}
         onChangeText={setPrice}
         keyboardType="numeric"
+        placeholder="25000"
       />
 
-      <Text style={styles.label}>Đơn vị</Text>
-      <TouchableOpacity
-        style={[styles.input, styles.selectBox]}
-        onPress={() => setUnitModalVisible(true)}
-      >
-        <Text style={{ color: unit ? "#000" : "#999" }}>
-          {unit || "Chọn đơn vị"}
-        </Text>
-        <Icon name="chevron-down-outline" size={18} color="#666" />
+      {/* Số lượng tồn kho */}
+      <Text style={styles.label}>Số lượng tồn *</Text>
+      <TextInput
+        style={styles.input}
+        value={quantity}
+        onChangeText={setQuantity}
+        keyboardType="numeric"
+        placeholder="VD: 50 (kg, bó, thùng...)"
+      />
+
+      <Text style={styles.label}>Đơn vị *</Text>
+      <TouchableOpacity style={[styles.input, styles.selectBox]} onPress={() => setUnitModalVisible(true)}>
+        <Text style={{ color: unit ? "#000" : "#999" }}>{unit || "Chọn đơn vị"}</Text>
+        <Icon name="chevron-down" size={20} color="#666" />
       </TouchableOpacity>
 
+      <Text style={styles.label}>Danh mục *</Text>
+      <TouchableOpacity style={[styles.input, styles.selectBox]} onPress={() => setCategoryModalVisible(true)}>
+        <Text style={{ color: category ? "#000" : "#999" }}>{category || "Chọn danh mục"}</Text>
+        <Icon name="chevron-down" size={20} color="#666" />
+      </TouchableOpacity>
+
+      <Text style={styles.label}>Mùa vụ *</Text>
+      <TouchableOpacity style={[styles.input, styles.selectBox]} onPress={() => setSeasonModalVisible(true)}>
+        <Text style={{ color: season ? "#000" : "#999" }}>{season || "Chọn mùa vụ"}</Text>
+        <Icon name="chevron-down" size={20} color="#666" />
+      </TouchableOpacity>
+
+      <Text style={styles.label}>Khu vực trồng *</Text>
+      <TextInput
+        style={styles.input}
+        value={growingRegion}
+        onChangeText={setGrowingRegion}
+        placeholder="VD: Đà Lạt, Lâm Đồng, Di Linh..."
+      />
+
+      <Text style={styles.label}>Vị trí bán hàng</Text>
+      <TextInput
+        style={[styles.input, { color: "#555" }]}
+        value={region}
+        editable={false}
+        multiline
+      />
+
+      {/* Bản đồ nhỏ */}
+      <View style={styles.mapContainer}>
+        {location ? (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            provider={PROVIDER_GOOGLE}
+            initialRegion={{
+              latitude: location.latitude,
+              longitude: location.longitude,
+              latitudeDelta: 0.01,
+              longitudeDelta: 0.01,
+            }}
+            onRegionChangeComplete={handleRegionChange}
+          >
+            <Marker
+              coordinate={location}
+              draggable
+              onDragEnd={(e) => {
+                const coord = e.nativeEvent.coordinate;
+                setLocation(coord);
+                reverseGeocode(coord.latitude, coord.longitude).then(setRegion);
+              }}
+            />
+          </MapView>
+        ) : (
+          <View style={styles.mapPlaceholder}>
+            <Text>Đang tải bản đồ...</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Nút thêm */}
+      <TouchableOpacity
+        style={[styles.button, loading && { opacity: 0.7 }]}
+        onPress={handleAddProduct}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? "Đang lưu sản phẩm..." : "Thêm sản phẩm"}
+        </Text>
+      </TouchableOpacity>
+
+      {/* Modal chọn Đơn vị */}
       <Modal transparent visible={isUnitModalVisible} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setUnitModalVisible(false)}
-          />
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setUnitModalVisible(false)}>
           <View style={styles.modalBox}>
             {units.map((item) => (
               <TouchableOpacity
@@ -286,38 +354,16 @@ const AddProductScreen = ({ navigation }) => {
                   setUnitModalVisible(false);
                 }}
               >
-                <Text
-                  style={[
-                    styles.modalText,
-                    unit === item && { fontWeight: "bold", color: "#2e7d32" },
-                  ]}
-                >
-                  {item}
-                </Text>
+                <Text style={[styles.modalText, unit === item && styles.selectedText]}>{item}</Text>
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
-      <Text style={styles.label}>Danh mục</Text>
-      <TouchableOpacity
-        style={[styles.input, styles.selectBox]}
-        onPress={() => setCategoryModalVisible(true)}
-      >
-        <Text style={{ color: category ? "#000" : "#999" }}>
-          {category || "Chọn danh mục"}
-        </Text>
-        <Icon name="chevron-down-outline" size={18} color="#666" />
-      </TouchableOpacity>
-
+      {/* Modal chọn Danh mục */}
       <Modal transparent visible={isCategoryModalVisible} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setCategoryModalVisible(false)}
-          />
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCategoryModalVisible(false)}>
           <View style={styles.modalBox}>
             {categories.map((item) => (
               <TouchableOpacity
@@ -328,38 +374,16 @@ const AddProductScreen = ({ navigation }) => {
                   setCategoryModalVisible(false);
                 }}
               >
-                <Text
-                  style={[
-                    styles.modalText,
-                    category === item && { fontWeight: "bold", color: "#2e7d32" },
-                  ]}
-                >
-                  {item}
-                </Text>
+                <Text style={[styles.modalText, category === item && styles.selectedText]}>{item}</Text>
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
 
-      <Text style={styles.label}>Mùa vụ</Text>
-      <TouchableOpacity
-        style={[styles.input, styles.selectBox]}
-        onPress={() => setSeasonModalVisible(true)}
-      >
-        <Text style={{ color: season ? "#000" : "#999" }}>
-          {season || "Chọn mùa vụ"}
-        </Text>
-        <Icon name="chevron-down-outline" size={18} color="#666" />
-      </TouchableOpacity>
-
+      {/* Modal chọn Mùa vụ */}
       <Modal transparent visible={isSeasonModalVisible} animationType="fade">
-        <View style={styles.modalOverlay}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            activeOpacity={1}
-            onPress={() => setSeasonModalVisible(false)}
-          />
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSeasonModalVisible(false)}>
           <View style={styles.modalBox}>
             {seasons.map((item) => (
               <TouchableOpacity
@@ -370,200 +394,68 @@ const AddProductScreen = ({ navigation }) => {
                   setSeasonModalVisible(false);
                 }}
               >
-                <Text
-                  style={[
-                    styles.modalText,
-                    season === item && { fontWeight: "bold", color: "#2e7d32" },
-                  ]}
-                >
-                  {item}
-                </Text>
+                <Text style={[styles.modalText, season === item && styles.selectedText]}>{item}</Text>
               </TouchableOpacity>
             ))}
           </View>
-        </View>
+        </TouchableOpacity>
       </Modal>
-
-      {/* THÊM MỚI: Khu vực địa lý (tự do nhập) */}
-      <Text style={styles.label}>
-        Khu vực địa lý (nơi trồng){' '}
-      </Text>
-      <TextInput
-        style={styles.input}
-        value={growingRegion}
-        onChangeText={setGrowingRegion}
-        placeholder="Nhập khu vực trồng...)"
-        placeholderTextColor="#aaa"
-      />
-
-      <Text style={styles.label}>Vị trí</Text>
-      <TextInput
-        style={[styles.input, { textAlign: "left" }]}
-        value={region}
-        onChangeText={setRegion}
-        placeholder="Đang lấy vị trí..."
-        editable={true}
-        multiline={true}
-        scrollEnabled={false}
-      />
-
-      {/* Mini Map */}
-      <View style={styles.mapContainer}>
-        {location ? (
-          <MapView
-            ref={mapRef}
-            style={styles.map}
-            provider={PROVIDER_GOOGLE}
-            initialRegion={{
-              latitude: location.latitude,
-              longitude: location.longitude,
-              latitudeDelta: 0.005,
-              longitudeDelta: 0.005,
-            }}
-            onRegionChangeComplete={handleRegionChange}
-          >
-            <Marker
-              coordinate={location}
-              draggable
-              onDragEnd={(e) => {
-                const newCoords = e.nativeEvent.coordinate;
-                setLocation(newCoords);
-                reverseGeocode(newCoords.latitude, newCoords.longitude).then((addr) => {
-                  setRegion(addr);
-                });
-              }}
-            >
-              <View style={styles.markerPin} />
-            </Marker>
-          </MapView>
-        ) : (
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapPlaceholderText}>Đang tải bản đồ...</Text>
-          </View>
-        )}
-      </View>
-
-      <TouchableOpacity
-        style={[styles.button, loading && { opacity: 0.6 }]}
-        onPress={handleAddProduct}
-        disabled={loading}
-      >
-        <Text style={styles.buttonText}>
-          {loading ? "Đang lưu..." : "Thêm sản phẩm"}
-        </Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 6,
-  },
+  container: { padding: 20, backgroundColor: "#fff", paddingBottom: 40 },
+  label: { fontSize: 15, fontWeight: "600", marginBottom: 8, color: "#333" },
   input: {
     borderWidth: 1,
     borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 14,
-    fontSize: 14,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    backgroundColor: "#fafafa",
+    marginBottom: 16,
   },
-  textarea: {
-    height: 80,
-    textAlignVertical: "top",
-  },
-  selectBox: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
+  textarea: { height: 100, textAlignVertical: "top" },
+  selectBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  imageSection: { alignItems: "center", marginBottom: 24 },
   imageBox: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#ccc",
-    alignItems: "center",
+    width: 120,
+    height: 120,
+    borderRadius: 16,
+    backgroundColor: "#f5f5f5",
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+    borderStyle: "dashed",
     justifyContent: "center",
-    backgroundColor: "#FAFAFA",
+    alignItems: "center",
   },
-  previewImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-    resizeMode: "cover",
-  },
+  previewImage: { width: 120, height: 120, borderRadius: 16 },
+  imageHint: { marginTop: 8, fontSize: 13, color: "#d32f2f" },
   button: {
-    backgroundColor: "#2D6B60",
-    paddingVertical: 14,
-    borderRadius: 10,
+    backgroundColor: "#2e7d32",
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: "center",
     marginTop: 10,
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalBox: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    width: "80%",
-  },
-  modalItem: {
-    paddingVertical: 10,
-  },
-  modalText: {
-    fontSize: 16,
-    textAlign: "center",
-  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
   mapContainer: {
-    height: 200,
-    borderRadius: 10,
+    height: 220,
+    borderRadius: 12,
     overflow: "hidden",
-    marginBottom: 14,
+    marginVertical: 16,
     borderWidth: 1,
     borderColor: "#ddd",
   },
-  map: {
-    flex: 1,
-  },
-  mapPlaceholder: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f5f5f5",
-  },
-  mapPlaceholderText: {
-    color: "#999",
-    fontSize: 14,
-  },
-  markerPin: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "#d32f2f",
-    borderWidth: 4,
-    borderColor: "#fff",
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
+  map: { flex: 1 },
+  mapPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f0f0f0" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", alignItems: "center" },
+  modalBox: { backgroundColor: "#fff", width: "80%", borderRadius: 12, padding: 10 },
+  modalItem: { paddingVertical: 14, paddingHorizontal: 10 },
+  modalText: { fontSize: 16, textAlign: "center" },
+  selectedText: { fontWeight: "bold", color: "#2e7d32" },
 });
 
 export default AddProductScreen;

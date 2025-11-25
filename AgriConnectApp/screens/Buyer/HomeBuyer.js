@@ -741,7 +741,6 @@ const styles = StyleSheet.create({
   },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
   chatIconContainer: { padding: 8, borderRadius: 30 },
-  // ... toàn bộ styles còn lại giữ nguyên như trước ...
   bannerWrapper: { marginTop: 0, marginBottom: 16, marginHorizontal: -16, paddingHorizontal: 0 },
   bannerContainer: { height: 160, borderRadius: 0, overflow: "hidden", elevation: 6 },
   bannerImage: { width: "100%", height: "100%" },

@@ -12,38 +12,62 @@ import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
 import Icon from "react-native-vector-icons/Ionicons";
 
-const HomeFarmer = ({ navigation }) => {
+const formatPrice = (price) => {
+  return Number(price || 0).toLocaleString("vi-VN");
+};
+
+const ProductScreen = ({ navigation }) => {
   const [myProducts, setMyProducts] = useState([]);
-  const userId = auth().currentUser.uid;
+  const userId = auth().currentUser?.uid;
 
   useEffect(() => {
+    if (!userId) {
+      Alert.alert("Lỗi", "Không tìm thấy thông tin người dùng");
+      return;
+    }
+
     const unsubscribe = firestore()
       .collection("products")
       .where("sellerId", "==", userId)
-      .onSnapshot((snapshot) => {
-        const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        setMyProducts(data);
-      });
-    return () => unsubscribe();
-  }, []);
-
-  const handleDelete = (id) => {
-    Alert.alert("Xóa sản phẩm", "Bạn có chắc muốn xóa sản phẩm này?", [
-      { text: "Hủy", style: "cancel" },
-      {
-        text: "Xóa",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await firestore().collection("products").doc(id).delete();
-            Alert.alert("✅ Đã xóa sản phẩm thành công!");
-          } catch (error) {
-            console.error(error);
-            Alert.alert("❌ Lỗi khi xóa sản phẩm!");
-          }
+      .onSnapshot(
+        (snapshot) => {
+          const data = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+          }));
+          setMyProducts(data);
         },
-      },
-    ]);
+        (error) => {
+          console.error("Lỗi tải sản phẩm:", error);
+          Alert.alert("Lỗi", "Không thể tải danh sách sản phẩm");
+        }
+      );
+
+    return () => unsubscribe();
+  }, [userId]);
+
+  const handleDelete = (id, productName) => {
+    Alert.alert(
+      "Xóa sản phẩm",
+      `Xóa "${productName}" khỏi danh sách?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        {
+          text: "Xóa",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await firestore().collection("products").doc(id).delete();
+              Alert.alert("Thành công", "Đã xóa sản phẩm!");
+            } catch (error) {
+              console.error(error);
+              Alert.alert("Lỗi", "Không thể xóa sản phẩm");
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const renderItem = ({ item }) => (
@@ -59,30 +83,36 @@ const HomeFarmer = ({ navigation }) => {
               "https://cdn-icons-png.flaticon.com/512/415/415733.png",
           }}
           style={styles.image}
+          resizeMode="cover"
         />
         <View style={styles.info}>
-          <Text style={styles.name}>{item.name}</Text>
-          <Text style={styles.detail}>
-            💰 {item.price} đ / {item.unit}
+          <Text style={styles.name} numberOfLines={1}>
+            {item.name}
           </Text>
-          <Text style={styles.detail}>🌾 Mùa: {item.season}</Text>
+          <Text style={styles.price}>
+            {formatPrice(item.price)}đ/{item.unit}
+          </Text>
+          <Text style={styles.detail}>Mùa: {item.season || "Không rõ"}</Text>
+          <Text style={styles.stock}>
+            Còn: {item.stock || 0} {item.unit}
+          </Text>
         </View>
       </TouchableOpacity>
 
-      {/* Hai nút sửa / xóa */}
-      <View style={styles.iconColumn}>
+      {/* Nút Sửa & Xóa */}
+      <View style={styles.actionButtons}>
         <TouchableOpacity
+          style={styles.editButton}
           onPress={() => navigation.navigate("EditProduct", { product: item })}
         >
-          <Icon name="create-outline" size={22} color="#4CAF50" />
+          <Icon name="create-outline" size={24} color="#2e7d32" />
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() =>
-            firestore().collection("products").doc(item.id).delete()
-          }
+          style={styles.deleteButton}
+          onPress={() => handleDelete(item.id, item.name)}
         >
-          <Icon name="trash-outline" size={22} color="#E53935" />
+          <Icon name="trash-outline" size={24} color="#e74c3c" />
         </TouchableOpacity>
       </View>
     </View>
@@ -92,13 +122,10 @@ const HomeFarmer = ({ navigation }) => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>🌿 Nông sản của tôi</Text>
-        <Icon
-          name="refresh"
-          size={24}
-          color="#fff"
-          onPress={() => navigation.replace("HomeFarmer")}
-        />
+        <Text style={styles.headerTitle}>Nông sản của tôi</Text>
+        <TouchableOpacity onPress={() => navigation.replace("HomeFarmer")}>
+          <Icon name="refresh" size={26} color="#fff" />
+        </TouchableOpacity>
       </View>
 
       {/* Danh sách sản phẩm */}
@@ -108,109 +135,147 @@ const HomeFarmer = ({ navigation }) => {
             source={{
               uri: "https://cdn-icons-png.flaticon.com/512/4202/4202843.png",
             }}
-            style={{ width: 100, height: 100, marginBottom: 10 }}
+            style={{ width: 120, height: 120, opacity: 0.7 }}
           />
-          <Text style={styles.emptyText}>Chưa có sản phẩm nào 🥕</Text>
+          <Text style={styles.emptyText}>Chưa có sản phẩm nào</Text>
+          <Text style={{ color: "#888", marginTop: 8, textAlign: "center" }}>
+            Nhấn nút dấu cộng để thêm sản phẩm đầu tiên nhé!
+          </Text>
         </View>
       ) : (
         <FlatList
           data={myProducts}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingBottom: 80 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* Nút thêm sản phẩm */}
+      {/* Nút thêm sản phẩm nổi */}
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => navigation.navigate("AddProduct")}
       >
-        <Icon name="add" size={30} color="#fff" />
+        <Icon name="add" size={34} color="#fff" />
       </TouchableOpacity>
     </View>
   );
 };
 
-export default HomeFarmer;
+export default ProductScreen;
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: {
+    flex: 1,
+    backgroundColor: "#f5f7fa",
+  },
   header: {
-    backgroundColor: "#4CAF50",
+    backgroundColor: "#2e7d32",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    paddingTop: 50,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 5,
-    paddingTop: 40,
+    elevation: 6,
   },
-  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "bold" },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 21,
+    fontWeight: "bold",
+  },
   card: {
     flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f8fdf8",
-    borderRadius: 12,
+    backgroundColor: "#fff",
+    marginHorizontal: 14,
+    marginVertical: 7,
+    borderRadius: 16,
     padding: 12,
-    marginHorizontal: 8,
-    marginVertical: 6,
+    elevation: 4,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   cardContent: {
     flex: 1,
     flexDirection: "row",
-    alignItems: "center",
   },
-  image: { width: 70, height: 70, borderRadius: 10, marginRight: 12 },
-  info: { flex: 1 },
-  name: { fontSize: 16, fontWeight: "bold", marginBottom: 4 },
-  detail: { fontSize: 13, color: "#555" },
-  iconColumn: {
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginVertical: 6,
-    height: 60,
+  image: {
+    width: 85,
+    height: 85,
+    borderRadius: 14,
+    backgroundColor: "#eee",
   },
-  emptyContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  emptyText: { fontSize: 16, color: "#777" },
-  addButton: {
-    position: "absolute",
-    bottom: 24,
-    right: 24,
-    backgroundColor: "#4CAF50",
-    borderRadius: 50,
-    width: 60,
-    height: 60,
+  info: {
+    flex: 1,
+    marginLeft: 14,
     justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
+  },
+  name: {
+    fontSize: 17,
+    fontWeight: "bold",
+    color: "#2c3e50",
+  },
+  price: {
+    fontSize: 17,
+    fontWeight: "bold",
+    color: "#27ae60",
+    marginTop: 5,
+  },
+  detail: {
+    fontSize: 14,
+    color: "#7f8c8d",
+    marginTop: 3,
+  },
+  stock: {
+    fontSize: 14,
+    color: "#e67e22",
+    fontWeight: "600",
+    marginTop: 4,
   },
   actionButtons: {
-    justifyContent: "space-between",
-    alignItems: "center",
-    height: 70,
-    marginLeft: 10,
-    gap: 10,
+    justifyContent: "center",
+    gap: 18,
   },
   editButton: {
-    backgroundColor: "#E8F5E9",
-    padding: 6,
-    borderRadius: 8,
+    backgroundColor: "#e8f5e9",
+    padding: 10,
+    borderRadius: 12,
   },
   deleteButton: {
-    backgroundColor: "#FFEBEE",
-    padding: 6,
-    borderRadius: 8,
+    backgroundColor: "#ffebee",
+    padding: 10,
+    borderRadius: 12,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 19,
+    color: "#95a5a6",
+    marginTop: 20,
+    fontWeight: "600",
+  },
+  addButton: {
+    position: "absolute",
+    right: 24,
+    bottom: 30,
+    backgroundColor: "#27ae60",
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
 });

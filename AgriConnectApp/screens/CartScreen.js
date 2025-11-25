@@ -135,21 +135,37 @@ const CartScreen = ({ navigation }) => {
   const updateQuantity = async (id, delta) => {
     const user = auth().currentUser;
     if (!user) return;
-
+    const currentItem = cartItems.find(item => item.id === id);
+    if (!currentItem) return;
+    if (delta === -1 && currentItem.quantity === 1) {
+      const itemName = currentItem.name;
+      Alert.alert(
+        "Xóa sản phẩm",
+        `Bạn có chắc muốn xóa "${itemName}" ra khỏi giỏ hàng?`,
+        [
+          { text: "Hủy", style: "cancel" },
+          {
+            text: "Xóa",
+            style: "destructive",
+            onPress: async () => {
+              await removeItemCompletely(id);
+            },
+          },
+        ],
+        { cancelable: true }
+      );
+      return;
+    }
     const cartRef = firestore().collection("carts").doc(user.uid);
-
     try {
       await firestore().runTransaction(async (transaction) => {
         const doc = await transaction.get(cartRef);
         if (!doc.exists || !doc.data()) return;
-
-        let items = doc.data().items || [];
+        let items = [...(doc.data().items || [])];
         const index = items.findIndex((i) => i.id === id);
-
         if (index >= 0) {
           const newQty = items[index].quantity + delta;
           if (newQty <= 0) {
-            items[index].selected = false;
             items.splice(index, 1);
           } else {
             items[index].quantity = newQty;
@@ -159,43 +175,43 @@ const CartScreen = ({ navigation }) => {
       });
     } catch (error) {
       console.error("Lỗi cập nhật số lượng:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật số lượng. Vui lòng thử lại.");
     }
   };
+  const removeItemCompletely = async (id) => {
+    const user = auth().currentUser;
+    if (!user) return;
+    const cartRef = firestore().collection("carts").doc(user.uid);
+    try {
+      await firestore().runTransaction(async (transaction) => {
+        const doc = await transaction.get(cartRef);
+        if (!doc.exists || !doc.data()) return;
+
+        let items = doc.data().items || [];
+        items = items.filter((i) => i.id !== id);
+        transaction.set(cartRef, { items }, { merge: true });
+      });
+    } catch (error) {
+      console.error("Lỗi xóa sản phẩm:", error);
+      Alert.alert("Lỗi", "Không thể xóa sản phẩm. Vui lòng thử lại.");
+    }
+  };  
 
   const removeFromCart = async (id, name) => {
-    Alert.alert(
-      "Xóa sản phẩm",
-      `Bạn có chắc muốn xóa\n"${name}"\nkhỏi giỏ hàng?`,
-      [
-        { text: "Hủy", style: "cancel" },
-        {
-          text: "Xóa",
-          style: "destructive",
-          onPress: async () => {
-            const user = auth().currentUser;
-            if (!user) return;
-
-            const cartRef = firestore().collection("carts").doc(user.uid);
-
-            try {
-              await firestore().runTransaction(async (transaction) => {
-                const doc = await transaction.get(cartRef);
-                if (!doc.exists || !doc.data()) return;
-
-                let items = doc.data().items || [];
-                items = items.filter((i) => i.id !== id);
-                transaction.set(cartRef, { items }, { merge: true });
-              });
-            } catch (error) {
-              console.error("Lỗi xóa sản phẩm:", error);
-              Alert.alert("Lỗi", "Không thể xóa sản phẩm. Vui lòng thử lại.");
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
-  };
+  Alert.alert(
+    "Xóa sản phẩm",
+    `Bạn có chắc muốn xóa "${name}" ra khỏi giỏ hàng?`,
+    [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Xóa",
+        style: "destructive",
+        onPress: () => removeItemCompletely(id),
+      },
+    ],
+    { cancelable: true }
+  );
+};
 
   useEffect(() => {
     navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
