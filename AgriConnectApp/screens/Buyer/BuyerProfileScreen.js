@@ -150,7 +150,7 @@ const BuyerProfileScreen = ({ navigation }) => {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back-outline" size={26} color="#fff" />
+          <View style={{ width: 30 }} />
         </TouchableOpacity>
         <Text style={styles.title}>Hồ sơ của tôi</Text>
         <TouchableOpacity onPress={() => navigation.navigate("Settings")}>
@@ -256,7 +256,7 @@ const BuyerProfileScreen = ({ navigation }) => {
 
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => navigation.navigate("OrderHistory")}
+          onPress={() => navigation.navigate("MyOrder", { initialTab: "shipping" })}
         >
           <Icon name="receipt-outline" size={22} color="#2e7d32" />
           <Text style={styles.actionText}>Lịch sử đơn hàng</Text>

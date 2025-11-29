@@ -5,6 +5,7 @@ import SplashScreen from "../screens/SplashScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
 import AuthNavigator from "./AuthNavigator";
 import ChatScreen from "../screens/ChatScreen";
+import ChatDetailScreen from "../screens/ChatDetailScreen";
 import CartScreen from "../screens/CartScreen";
 import ShippingMethodScreen from "../screens/ShippingMethodScreen";
 import PaymentMethodScreen from "../screens/PaymentMethodScreen";
@@ -42,9 +43,9 @@ export default function AppNavigator() {
         <Stack.Screen name="Splash" component={SplashScreen} options={{ headerShown: false }} />
         <Stack.Screen name="Onboarding" component={OnboardingScreen} options={{ headerShown: false }} />
         <Stack.Screen name="AuthFlow" component={AuthNavigator} options={{ headerShown: false }} />
-
         {/* === CÁC MÀN HÌNH CHUNG === */}
         <Stack.Screen name="Chat" component={ChatScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="ChatDetail" component={ChatDetailScreen} options={{ headerShown: false }} /> 
         <Stack.Screen name="Cart" component={CartScreen} options={{ headerShown: false }} />
         <Stack.Screen name="ShippingMethod" component={ShippingMethodScreen} options={{ headerShown: false }} />
         <Stack.Screen name="PaymentMethod" component={PaymentMethodScreen} options={{ headerShown: false }} />

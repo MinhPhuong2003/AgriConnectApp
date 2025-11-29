@@ -37,6 +37,8 @@ const HomeBuyer = ({ route, navigation }) => {
   const [preorderSuccessModal, setPreorderSuccessModal] = useState(false);
   const [currentPreorderProduct, setCurrentPreorderProduct] = useState(null);
 
+  const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
   };
@@ -54,6 +56,33 @@ const HomeBuyer = ({ route, navigation }) => {
 
     return harvestMap[season] || "Sắp có hàng";
   };
+
+  useEffect(() => {
+    const user = auth().currentUser;
+    if (!user) {
+      setUnreadMessagesCount(0);
+      return;
+    }
+
+    const uid = user.uid;
+
+    const unsubscribe = firestore()
+      .collection("chats")
+      .where("participants", "array-contains", uid)
+      .onSnapshot((snapshot) => {
+        let totalUnread = 0;
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const unreadForMe = data.unreadCount?.[uid] || 0;
+          totalUnread += unreadForMe;
+        });
+
+        setUnreadMessagesCount(totalUnread);
+      });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const user = auth().currentUser;
@@ -454,6 +483,15 @@ const HomeBuyer = ({ route, navigation }) => {
             onPress={() => navigation.navigate("Chat")}
           >
             <Icon name="chatbubble-outline" size={28} color="#fff" />
+
+            {/* Badge số tin nhắn chưa đọc */}
+            {unreadMessagesCount > 0 && (
+              <View style={styles.chatBadge}>
+                <Text style={styles.chatBadgeText}>
+                  {unreadMessagesCount > 99 ? "99+" : unreadMessagesCount}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -822,92 +860,115 @@ const styles = StyleSheet.create({
     flex: 1,
     letterSpacing: 0.4,
   },
-  // Modal đặt trước thành công - đẹp lung linh
-successModalContainer: {
-  backgroundColor: "#fff",
-  marginHorizontal: 30,
-  borderRadius: 20,
-  padding: 20,
-  alignItems: "center",
-  elevation: 10,
-  shadowColor: "#000",
-  shadowOffset: { width: 0, height: 5 },
-  shadowOpacity: 0.3,
-  shadowRadius: 10,
-},
-successIcon: {
-  marginBottom: 10,
-},
-successTitle: {
-  fontSize: 20,
-  fontWeight: "bold",
-  color: "#27ae60",
-  marginBottom: 16,
-},
-successProductInfo: {
-  flexDirection: "row",
-  alignItems: "center",
-  marginBottom: 20,
-  width: "100%",
-},
-successProductImage: {
-  width: 80,
-  height: 80,
-  borderRadius: 12,
-  marginRight: 12,
-},
-successProductDetails: {
-  flex: 1,
-},
-successProductName: {
-  fontSize: 16,
-  fontWeight: "600",
-  color: "#333",
-},
-successSeasonText: {
-  fontSize: 14,
-  color: "#27ae60",
-  marginTop: 4,
-},
-successHarvestText: {
-  fontSize: 13,
-  color: "#666",
-  marginTop: 4,
-  fontStyle: "italic",
-},
-successQuantityText: {
-  fontSize: 14,
-  color: "#e67e22",
-  fontWeight: "bold",
-  marginTop: 6,
-},
-successButtons: {
-  flexDirection: "row",
-  gap: 12,
-  marginTop: 10,
-},
-successCloseButton: {
-  flex: 1,
-  paddingVertical: 12,
-  borderRadius: 12,
-  backgroundColor: "#f0f0f0",
-  alignItems: "center",
-},
-successCloseText: {
-  fontSize: 16,
-  color: "#666",
-  fontWeight: "600",
-},
-successViewButton: {
-  flex: 1,
-  paddingVertical: 12,
-  borderRadius: 12,
-  backgroundColor: "#27ae60",
-  alignItems: "center",
-},
-successViewText: {
-  fontSize: 16,
-  color: "#fff",
-  fontWeight: "bold",
-},
+  successModalContainer: {
+    backgroundColor: "#fff",
+    marginHorizontal: 30,
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  successIcon: {
+    marginBottom: 10,
+  },
+  successTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#27ae60",
+    marginBottom: 16,
+  },
+  successProductInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    width: "100%",
+  },
+  successProductImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 12,
+    marginRight: 12,
+  },
+  successProductDetails: {
+    flex: 1,
+  },
+  successProductName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+  },
+  successSeasonText: {
+    fontSize: 14,
+    color: "#27ae60",
+    marginTop: 4,
+  },
+  successHarvestText: {
+    fontSize: 13,
+    color: "#666",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  successQuantityText: {
+    fontSize: 14,
+    color: "#e67e22",
+    fontWeight: "bold",
+    marginTop: 6,
+  },
+  successButtons: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 10,
+  },
+  successCloseButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#f0f0f0",
+    alignItems: "center",
+  },
+  successCloseText: {
+    fontSize: 16,
+    color: "#666",
+    fontWeight: "600",
+  },
+  successViewButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: "#27ae60",
+    alignItems: "center",
+  },
+  successViewText: {
+    fontSize: 16,
+    color: "#fff",
+    fontWeight: "bold",
+  },
+  chatIconContainer: { 
+    padding: 8, 
+    borderRadius: 30, 
+    position: "relative" 
+  },
+  chatBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "#e74c3c",
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    borderWidth: 2,
+    borderColor: "#fff",
+  },
+  chatBadgeText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "bold",
+  },
 });

@@ -31,6 +31,26 @@ const ProductDetailScreen = ({ route, navigation }) => {
   const [allProducts, setAllProducts] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const getOrCreateChat = async (buyerId, sellerId, product) => {
+    const chatsRef = firestore().collection("chats");
+    const query1 = chatsRef.where("participants", "==", [buyerId, sellerId]);
+    const query2 = chatsRef.where("participants", "==", [sellerId, buyerId]);
+    const [snap1, snap2] = await Promise.all([query1.get(), query2.get()]);
+    const existingChat = [...snap1.docs, ...snap2.docs][0];
+    if (existingChat) {
+      return existingChat.id;
+    }
+    const newChatRef = chatsRef.doc();
+    await newChatRef.set({
+      participants: [buyerId, sellerId],
+      lastMessage: `Tôi quan tâm sản phẩm: ${product.name}`,
+      lastSenderId: buyerId,
+      updatedAt: firestore.FieldValue.serverTimestamp(),
+      createdAt: firestore.FieldValue.serverTimestamp(),
+    });
+    return newChatRef.id;
+  };
+
   useEffect(() => {
     const user = auth().currentUser;
     if (!user) return;
@@ -418,7 +438,34 @@ const ProductDetailScreen = ({ route, navigation }) => {
             <Icon name="storefront-outline" size={22} color="#666" />
             <Text style={styles.shopText}>Cửa hàng</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.chatBtn}>
+          <TouchableOpacity 
+            style={styles.chatBtn}
+            onPress={async () => {
+              const buyerId = auth().currentUser?.uid;
+              if (!buyerId) {
+                alert("Vui lòng đăng nhập để nhắn tin!");
+                return;
+              }
+
+              const sellerId = product.sellerId;
+              if (!sellerId) {
+                alert("Không tìm thấy thông tin người bán");
+                return;
+              }
+
+              try {
+                const chatId = await getOrCreateChat(buyerId, sellerId, product);
+                
+                navigation.navigate("ChatDetail", {
+                  chatId,
+                  partnerId: sellerId,
+                });
+              } catch (err) {
+                console.error("Lỗi mở chat:", err);
+                alert("Không thể mở tin nhắn. Vui lòng thử lại.");
+              }
+            }}
+          >
             <Icon name="chatbubble-outline" size={22} color="#666" />
             <Text style={styles.chatText}>Nhắn tin</Text>
           </TouchableOpacity>
