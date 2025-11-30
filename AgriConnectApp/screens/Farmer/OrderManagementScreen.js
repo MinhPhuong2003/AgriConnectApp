@@ -87,6 +87,9 @@ const OrderManagementScreen = ({ navigation, route }) => {
         updates.cancelledAt = firestore.FieldValue.serverTimestamp();
       }
 
+      if (newStatus === "shipping") {
+        updates.deliveredAt = firestore.FieldValue.serverTimestamp();
+      }
       await firestore().collection("orders").doc(orderId).update(updates);
     } catch (error) {
       console.error("Lỗi cập nhật:", error);

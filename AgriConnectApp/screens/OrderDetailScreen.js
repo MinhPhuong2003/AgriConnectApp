@@ -375,18 +375,32 @@ const OrderDetailScreen = ({ navigation, route }) => {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      {/* NÚT CỐ ĐỊNH */}
       {isShipped && (
         <View style={styles.fixedButtonContainer}>
-          <TouchableOpacity
-            style={styles.reviewButton}
-            onPress={() => navigation.navigate("Review", { orderId: order.id })}
-          >
-            <Text style={[styles.buttonText, { color: "#2e7d32" }]}>Viết đánh giá</Text>
-          </TouchableOpacity>
+          {/* Nếu CHƯA đánh giá → hiện nút Viết đánh giá */}
+          {!order.reviewed && (
+            <TouchableOpacity
+              style={styles.reviewButton}
+              onPress={() => navigation.navigate("Review", { orderId: order.id })}
+            >
+              <Text style={[styles.buttonText, { color: "#2e7d32" }]}>Viết đánh giá</Text>
+            </TouchableOpacity>
+          )}
 
+          {/* Nếu ĐÃ đánh giá → hiện thông báo "Đã đánh giá" (không click được) */}
+          {order.reviewed && (
+            <View style={styles.reviewedFixedButton}>
+              <Icon name="checkmark-circle" size={20} color="#27ae60" />
+              <Text style={styles.reviewedFixedText}>Đã đánh giá</Text>
+            </View>
+          )}
+
+          {/* Nút Mua lại luôn hiện khi đã giao */}
           <TouchableOpacity
-            style={styles.buyAgainButton}
+            style={[
+              styles.buyAgainButton,
+              order.reviewed ? styles.buyAgainButtonReviewed : styles.buyAgainButtonNormal
+            ]}
             onPress={() => handleBuyAgain(order)}
           >
             <Text style={styles.buttonText}>Mua lại</Text>
@@ -394,6 +408,7 @@ const OrderDetailScreen = ({ navigation, route }) => {
         </View>
       )}
 
+      {/* Đơn chờ xác nhận */}
       {isPending && (
         <View style={styles.fixedButtonContainer}>
           <TouchableOpacity style={styles.cancelButton} onPress={handleCancelOrder}>
@@ -589,6 +604,34 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 14,
     fontWeight: "bold",
+  },
+  // Style cho nút "Đã đánh giá" cố định
+  reviewedFixedButton: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#27ae60",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 8,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  reviewedFixedText: {
+    color: "#27ae60",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginLeft: 6,
+  },
+  buyAgainButtonNormal: {
+    marginLeft: 8,
+    flex: 1,
+  },
+  buyAgainButtonReviewed: {
+    marginLeft: 0,
+    flex: 1,
   },
 });
 

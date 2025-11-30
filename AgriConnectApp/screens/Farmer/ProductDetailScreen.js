@@ -17,19 +17,30 @@ const PLACEHOLDER = "https://cdn-icons-png.flaticon.com/512/4202/4202843.png";
 
 const ProductDetailScreen = ({ route, navigation }) => {
   const { product } = route.params || {};
-
   const discount = product?.discount || 0;
   const originalPrice = product?.price || 0;
   const discountedPrice = originalPrice * (1 - discount / 100);
   const [cartCount, setCartCount] = useState(0);
-
   const [searchQuery, setSearchQuery] = useState("");
   const [finalSearchQuery, setFinalSearchQuery] = useState("");
   const [isSearchMode, setIsSearchMode] = useState(false);
   const inputRef = useRef(null);
-
   const [allProducts, setAllProducts] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [reviews, setReviews] = useState([]);
+  const [loadingReviews, setLoadingReviews] = useState(true);
+  const [avgRating, setAvgRating] = useState(5.0);
+  const [totalReviews, setTotalReviews] = useState(0);
+
+  const formatReviewTime = (date) => {
+    if (!date || !(date instanceof Date)) return "Vừa xong";
+    const day   = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year  = date.getFullYear();
+    const hours   = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+    return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+  };
 
   const getOrCreateChat = async (buyerId, sellerId, product) => {
     const chatsRef = firestore().collection("chats");
@@ -51,32 +62,109 @@ const ProductDetailScreen = ({ route, navigation }) => {
     return newChatRef.id;
   };
 
+  // === GIỎ HÀNG ===
   useEffect(() => {
     const user = auth().currentUser;
     if (!user) return;
 
     const cartRef = firestore().collection("carts").doc(user.uid);
-
-    const unsubscribe = cartRef.onSnapshot(
-      (doc) => {
-        if (doc.exists && doc.data()) {
-          const data = doc.data();
-          const items = data.items || [];
-          const total = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
-          setCartCount(total);
-        } else {
-          setCartCount(0);
-        }
-      },
-      (error) => {
-        console.error("Lỗi theo dõi giỏ:", error);
+    const unsubscribe = cartRef.onSnapshot((doc) => {
+      if (doc.exists && doc.data()) {
+        const items = doc.data().items || [];
+        const total = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        setCartCount(total);
+      } else {
         setCartCount(0);
       }
-    );
-
+    });
     return () => unsubscribe();
   }, []);
 
+  // === TẤT CẢ SẢN PHẨM CHO TÌM KIẾM ===
+  useEffect(() => {
+    const q = firestore().collection("products").where("available", "==", true);
+    const unsub = q.onSnapshot((snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      setAllProducts(list);
+    });
+    return () => unsub();
+  }, []);
+
+  // === LẤY ĐÁNH GIÁ THẬT TỪ FIRESTORE ===
+  useEffect(() => {
+    if (!product?.id) {
+      setLoadingReviews(false);
+      return;
+    }
+
+    setLoadingReviews(true);
+
+    const unsub = firestore()
+      .collection("reviews")
+      .where("productId", "==", product.id)
+      .orderBy("createdAt", "desc")
+      .onSnapshot(async (snapshot) => {
+        if (snapshot.empty) {
+          setReviews([]);
+          setAvgRating(5.0);
+          setTotalReviews(0);
+          setLoadingReviews(false);
+          return;
+        }
+
+        let totalRating = 0;
+        const userIds = new Set();
+        const tempReviews = [];
+
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          totalRating += data.rating || 0;
+          if (data.userId) userIds.add(data.userId);
+          tempReviews.push({
+            id: doc.id,
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date(),
+          });
+        });
+
+        // Lấy thông tin người dùng (tên + avatar)
+        let userMap = {};
+        if (userIds.size > 0) {
+          const userSnap = await firestore()
+            .collection("users")
+            .where(firestore.FieldPath.documentId(), "in", Array.from(userIds))
+            .get();
+
+          userSnap.forEach((u) => {
+            const d = u.data();
+            userMap[u.id] = {
+              name: d.name || d.displayName || "Khách hàng",
+              avatar: d.photoURL || d.avatarUrl,
+            };
+          });
+        }
+
+        const finalReviews = tempReviews.map((r) => ({
+          ...r,
+          userName: userMap[r.userId]?.name || "Khách hàng",
+          userAvatar: userMap[r.userId]?.avatar,
+        }));
+
+        const avg = totalRating / finalReviews.length;
+
+        setReviews(finalReviews);
+        setAvgRating(avg);
+        setTotalReviews(finalReviews.length);
+        setLoadingReviews(false);
+      }, (err) => {
+        console.error("Lỗi tải đánh giá:", err);
+        setLoadingReviews(false);
+      });
+
+    return () => unsub();
+  }, [product?.id]);
+
+  // === THÊM VÀO GIỎ ===
   const addToCart = async (product) => {
     const user = auth().currentUser;
     if (!user) {
@@ -84,23 +172,17 @@ const ProductDetailScreen = ({ route, navigation }) => {
       return;
     }
 
-    const cartRef = firestore().collection("carts").doc(user.uid);
-
     try {
+      const cartRef = firestore().collection("carts").doc(user.uid);
       await firestore().runTransaction(async (transaction) => {
         const cartDoc = await transaction.get(cartRef);
-        let cartItems = [];
+        let items = cartDoc.exists ? cartDoc.data().items || [] : [];
 
-        if (cartDoc.exists && cartDoc.data()) {
-          cartItems = cartDoc.data().items || [];
-        }
-
-        const existingIndex = cartItems.findIndex((item) => item.id === product.id);
-
+        const existingIndex = items.findIndex((i) => i.id === product.id);
         if (existingIndex >= 0) {
-          cartItems[existingIndex].quantity += 1;
+          items[existingIndex].quantity += 1;
         } else {
-          cartItems.push({
+          items.push({
             id: product.id,
             name: product.name,
             price: Math.round(product.price * (1 - (product.discount || 0) / 100)),
@@ -108,97 +190,87 @@ const ProductDetailScreen = ({ route, navigation }) => {
             discount: product.discount || 0,
             imageUrl: product.imageUrl || PLACEHOLDER,
             quantity: 1,
+            sellerId: product.sellerId,
           });
         }
-
-        transaction.set(cartRef, { items: cartItems }, { merge: true });
+        transaction.set(cartRef, { items }, { merge: true });
       });
-    } catch (error) {
-      console.error("Lỗi thêm vào giỏ:", error);
-      alert("Không thể thêm vào giỏ. Vui lòng thử lại.");
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi thêm vào giỏ");
     }
   };
 
-  // === LẤY TẤT CẢ SẢN PHẨM CHO TÌM KIẾM ===
-  useEffect(() => {
-    setLoading(true);
-    const q = firestore()
-      .collection("products")
-      .where("available", "==", true);
-
-    const unsub = q.onSnapshot(
-      (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setAllProducts(list);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Lỗi tải sản phẩm:", err);
-        setLoading(false);
-      }
-    );
-    return () => unsub();
-  }, []);
-
-  // === LỌC SẢN PHẨM ===
-  const filteredProducts = allProducts.filter((p) => {
-    const name = (p.name || "").toLowerCase().trim();
-    const q = finalSearchQuery.toLowerCase().trim();
-    return q ? name.includes(q) : true;
-  });
-
-  // === XỬ LÝ TÌM KIẾM ===
+  // === TÌM KIẾM ===
   const enterSearchMode = () => {
     setIsSearchMode(true);
     setTimeout(() => inputRef.current?.focus(), 100);
   };
-
   const handleSearch = () => {
-    const trimmed = searchQuery.trim();
-    if (trimmed) setFinalSearchQuery(trimmed);
+    const q = searchQuery.trim();
+    if (q) setFinalSearchQuery(q);
   };
-
   const handleClearSearch = () => {
     setSearchQuery("");
     setFinalSearchQuery("");
     setIsSearchMode(false);
   };
-
   const handleBackToDetail = () => {
     setIsSearchMode(false);
     setSearchQuery("");
     setFinalSearchQuery("");
   };
 
-  const reviews = [
-    {
-      id: "1",
-      userName: "Thuy Linh",
-      rating: 5,
-      comment:
-        "Gạo ST25 đặc sản Sóc Trăng. Sản phẩm này rất tốt, giá rẻ so với thị trường. Lần sau sẽ ủng hộ shop tiếp.",
-      date: "20/07/2024",
-      image: "https://via.placeholder.com/300x150.png?text=Gạo+ST25",
-    },
-    {
-      id: "2",
-      userName: "Tuấn Nguyễn",
-      rating: 5,
-      comment:
-        "Gạo ST25 đặc sản Sóc Trăng. Sản phẩm này rất tốt, giá rẻ so với thị trường. Lần sau sẽ ủng hộ shop tiếp.",
-      date: "20/07/2024",
-      image: "https://via.placeholder.com/300x150.png?text=Gạo+ST25",
-    },
-  ];
+  const filteredProducts = allProducts.filter((p) =>
+    finalSearchQuery
+      ? (p.name || "").toLowerCase().includes(finalSearchQuery.toLowerCase())
+      : true
+  );
+
+  // === RENDER ĐÁNH GIÁ ===
+  const renderReview = ({ item }) => (
+    <View style={styles.reviewItem}>
+      <View style={styles.reviewHeader}>
+        <Image
+          source={{ uri: item.userAvatar || PLACEHOLDER }}
+          style={styles.avatar}
+          defaultSource={{ uri: PLACEHOLDER }}
+        />
+        <View style={styles.userInfo}>
+          <Text style={styles.userName}>{item.userName}</Text>
+          <View style={styles.ratingRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Icon
+                key={star}
+                name="star"
+                size={14}
+                color={star <= item.rating ? "#ffc107" : "#ddd"}
+              />
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <Text style={styles.reviewComment}>{item.comment || "Không có nhận xét"}</Text>
+
+      {item.imageUrls && item.imageUrls.length > 0 && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", marginTop: 8, gap: 8 }}>
+          {item.imageUrls.map((url, i) => (
+            <Image key={i} source={{ uri: url }} style={styles.reviewImage} />
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.reviewDate}>
+        {formatReviewTime(item.createdAt)}
+      </Text>
+    </View>
+  );
 
   const ListHeader = () => (
     <>
       <View style={styles.imageContainer}>
-        <Image
-          source={{ uri: product?.imageUrl || PLACEHOLDER }}
-          style={styles.productImage}
-          resizeMode="cover"
-        />
+        <Image source={{ uri: product?.imageUrl || PLACEHOLDER }} style={styles.productImage} />
       </View>
 
       <View style={styles.priceSection}>
@@ -207,9 +279,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
         </Text>
         {discount > 0 && (
           <>
-            <Text style={styles.originalPrice}>
-              {originalPrice.toLocaleString("vi-VN")}đ
-            </Text>
+            <Text style={styles.originalPrice}>{originalPrice.toLocaleString("vi-VN")}đ</Text>
             <View style={styles.discountBadge}>
               <Text style={styles.discountText}>-{discount}%</Text>
             </View>
@@ -217,68 +287,33 @@ const ProductDetailScreen = ({ route, navigation }) => {
         )}
       </View>
 
-      <Text style={styles.productName} numberOfLines={2}>
-        {product?.name || "Sản phẩm"}
-      </Text>
+      <Text style={styles.productName}>{product?.name || "Sản phẩm"}</Text>
 
-      {/* MÔ TẢ SẢN PHẨM */}
-      {product?.description ? (
+      {product?.description && (
         <View style={styles.descriptionContainer}>
           <Text style={styles.descriptionTitle}>Mô tả sản phẩm</Text>
           <Text style={styles.descriptionText}>{product.description}</Text>
         </View>
-      ) : null}
+      )}
 
       <View style={styles.ratingSection}>
         <View style={styles.ratingRow}>
           <Icon name="star" size={18} color="#ffc107" />
-          <Text style={styles.avgRating}>
-            {product?.avgRating
-              ? parseFloat(product.avgRating).toFixed(1)
-              : "4.9"}
-          </Text>
-          <Text style={styles.reviewCount}>
-            ({product?.reviewsCount || 357} đánh giá)
-          </Text>
+          <Text style={styles.avgRating}>{avgRating.toFixed(1)}</Text>
+          <Text style={styles.reviewCount}>({totalReviews} đánh giá)</Text>
         </View>
       </View>
 
       <View style={styles.reviewsTitleContainer}>
-        <Text style={styles.reviewsTitle}>
-          Đánh giá khách hàng ({reviews.length})
-        </Text>
+        <Text style={styles.reviewsTitle}>Đánh giá khách hàng ({totalReviews})</Text>
       </View>
-    </>
-  );
 
-  const renderReview = ({ item }) => (
-    <View style={styles.reviewItem}>
-      <View style={styles.reviewHeader}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {item.userName.charAt(0).toUpperCase()}
-          </Text>
+      {loadingReviews && (
+        <View style={{ padding: 20, alignItems: "center" }}>
+          <ActivityIndicator size="small" color="#2e7d32" />
         </View>
-        <View style={styles.userInfo}>
-          <Text style={styles.userName}>{item.userName}</Text>
-          <View style={styles.ratingRow}>
-            {[...Array(5)].map((_, i) => (
-              <Icon
-                key={i}
-                name="star"
-                size={14}
-                color={i < item.rating ? "#ffc107" : "#ddd"}
-              />
-            ))}
-          </View>
-        </View>
-      </View>
-      <Text style={styles.reviewComment}>{item.comment}</Text>
-      {item.image && (
-        <Image source={{ uri: item.image }} style={styles.reviewImage} />
       )}
-      <Text style={styles.reviewDate}>{item.date}</Text>
-    </View>
+    </>
   );
 
   const renderResultItem = ({ item }) => {
@@ -290,37 +325,17 @@ const ProductDetailScreen = ({ route, navigation }) => {
       <TouchableOpacity
         style={styles.resultCard}
         onPress={() => {
-          navigation.push("ProductDetail", { product: item });
+          navigation.replace("ProductDetail", { product: item });
           handleBackToDetail();
         }}
       >
         <View style={styles.resultImgWrap}>
-          <Image
-            source={{ uri: item.imageUrl || PLACEHOLDER }}
-            style={styles.resultImg}
-            resizeMode="cover"
-          />
+          <Image source={{ uri: item.imageUrl || PLACEHOLDER }} style={styles.resultImg} />
         </View>
-        <Text style={styles.resultName} numberOfLines={2}>
-          {item.name}
-        </Text>
+        <Text style={styles.resultName} numberOfLines={2}>{item.name}</Text>
         <View style={styles.resultPriceRow}>
-          {disc > 0 ? (
-            <>
-              <Text style={styles.resultDiscPrice}>
-                {discPrice.toFixed(0)}đ
-              </Text>
-              <Text style={styles.resultOrigPrice}>{price}đ</Text>
-            </>
-          ) : (
-            <Text style={styles.resultDiscPrice}>{price}đ</Text>
-          )}
-        </View>
-        <View style={styles.resultRatingRow}>
-          <Icon name="star" size={13} color="#ffc107" />
-          <Text style={styles.resultRating}>
-            {item.avgRating ? parseFloat(item.avgRating).toFixed(1) : "0"}
-          </Text>
+          <Text style={styles.resultDiscPrice}>{discPrice.toFixed(0)}đ</Text>
+          {disc > 0 && <Text style={styles.resultOrigPrice}>{price}đ</Text>}
         </View>
       </TouchableOpacity>
     );
@@ -354,11 +369,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
               onFocus={enterSearchMode}
               returnKeyType="search"
             />
-            {searchQuery && searchQuery !== finalSearchQuery && (
-              <TouchableOpacity onPress={handleSearch} style={{ marginLeft: 8 }}>
-                <Icon name="arrow-forward-circle" size={22} color="#2e7d32" />
-              </TouchableOpacity>
-            )}
             {searchQuery && (
               <TouchableOpacity onPress={handleClearSearch} style={{ marginLeft: 8 }}>
                 <Icon name="close-circle" size={20} color="#999" />
@@ -366,10 +376,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.cartIconContainer}
-            onPress={() => navigation.navigate("Cart")}
-          >
+          <TouchableOpacity style={styles.cartIconContainer} onPress={() => navigation.navigate("Cart")}>
             <Icon name="cart-outline" size={30} color="#fff" />
             {cartCount > 0 && (
               <View style={styles.cartBadge}>
@@ -377,67 +384,45 @@ const ProductDetailScreen = ({ route, navigation }) => {
               </View>
             )}
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.chatIconContainer}
-            onPress={() => navigation.navigate("Chat")}
-          >
-            <Icon name="chatbubble-outline" size={28} color="#fff" />
-          </TouchableOpacity>
         </View>
       </View>
 
-      {/* NỘI DUNG CHÍNH */}
-      {isSearchMode && !finalSearchQuery ? (
-        <View style={styles.searchPlaceholder}>
-          <Icon name="search" size={60} color="#ccc" />
-          <Text style={styles.searchPlaceholderText}>
-            Nhập từ khóa để tìm kiếm sản phẩm
-          </Text>
-        </View>
-      ) : isSearchMode && finalSearchQuery ? (
-        <View style={{ flex: 1 }}>
-          {loading ? (
-            <View style={styles.loadingBox}>
-              <ActivityIndicator size="large" color="#2e7d32" />
-            </View>
-          ) : filteredProducts.length === 0 ? (
+      {/* NỘI DUNG */}
+      {isSearchMode ? (
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={(i) => i.id}
+          numColumns={2}
+          columnWrapperStyle={{ justifyContent: "space-between", paddingHorizontal: 16 }}
+          renderItem={renderResultItem}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          ListEmptyComponent={
             <View style={styles.emptyBox}>
               <Icon name="search-off" size={60} color="#ccc" />
-              <Text style={styles.emptyText}>
-                Không tìm thấy sản phẩm cho “{finalSearchQuery}”
-              </Text>
+              <Text style={styles.emptyText}>Không tìm thấy sản phẩm</Text>
             </View>
-          ) : (
-            <FlatList
-              data={filteredProducts}
-              keyExtractor={(i) => i.id}
-              numColumns={2}
-              columnWrapperStyle={{ justifyContent: "space-between", paddingHorizontal: 16 }}
-              renderItem={renderResultItem}
-              contentContainerStyle={{ paddingBottom: 100 }}
-              showsVerticalScrollIndicator={false}
-            />
-          )}
-        </View>
+          }
+        />
       ) : (
         <FlatList
           data={reviews}
           renderItem={renderReview}
           keyExtractor={(i) => i.id}
           ListHeaderComponent={ListHeader}
+          ListEmptyComponent={!loadingReviews && <Text style={{ textAlign: "center", margin: 30, color: "#999" }}>Chưa có đánh giá nào</Text>}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
         />
       )}
 
-      {/* BOTTOM BAR - CHỈ HIỆN KHI KHÔNG TÌM KIẾM */}
+      {/* BOTTOM BAR */}
       {!isSearchMode && (
         <View style={styles.bottomBar}>
           <TouchableOpacity style={styles.shopBtn}>
             <Icon name="storefront-outline" size={22} color="#666" />
             <Text style={styles.shopText}>Cửa hàng</Text>
           </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.chatBtn}
             onPress={async () => {
@@ -469,12 +454,11 @@ const ProductDetailScreen = ({ route, navigation }) => {
             <Icon name="chatbubble-outline" size={22} color="#666" />
             <Text style={styles.chatText}>Nhắn tin</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.addToCartBtn}
-            onPress={() => addToCart(product)}
-          >
-            <Text style={styles.addToCartText}>Thêm vào giỏ hàng</Text>
+
+          <TouchableOpacity style={styles.addToCartBtn} onPress={() => addToCart(product)}>
+            <Text style={styles.addToCartText}>Thêm vào giỏ</Text>
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.buyNowBtn}>
             <Text style={styles.buyNowText}>Mua ngay</Text>
           </TouchableOpacity>
@@ -486,55 +470,18 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
 export default ProductDetailScreen;
 
+// Styles giữ nguyên 99%, chỉ thêm 1 cái nhỏ
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: {
-    backgroundColor: "#2ecc71",
-    paddingTop: 40,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
+  header: { backgroundColor: "#2ecc71", paddingTop: 40, paddingHorizontal: 16, paddingBottom: 12 },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  backButtonContainer: { padding: 4, marginRight: 2 },
-  searchBox: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderRadius: 40,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#333",
-    paddingVertical: 0,
-    marginLeft: 8,
-    fontWeight: "500",
-  },
-  cartIconContainer: { padding: 8, position: "relative", borderRadius: 30 },
-  cartBadge: {
-    position: "absolute",
-    right: 4,
-    top: 4,
-    backgroundColor: "red",
-    borderRadius: 9,
-    minWidth: 18,
-    height: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 4,
-  },
+  backButtonContainer: { padding: 4 },
+  searchBox: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 40, paddingHorizontal: 16, paddingVertical: 12, elevation: 4 },
+  searchInput: { flex: 1, fontSize: 16, color: "#333", marginLeft: 8 },
+  cartIconContainer: { padding: 8, position: "relative" },
+  cartBadge: { position: "absolute", right: 4, top: 4, backgroundColor: "red", borderRadius: 9, minWidth: 18, height: 18, justifyContent: "center", alignItems: "center" },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
-  chatIconContainer: { padding: 8, borderRadius: 30 },
 
-  // CHI TIẾT SẢN PHẨM
   imageContainer: { height: 300 },
   productImage: { width: "100%", height: "100%" },
   priceSection: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginTop: 12, gap: 10 },
@@ -542,109 +489,45 @@ const styles = StyleSheet.create({
   originalPrice: { fontSize: 16, color: "#999", textDecorationLine: "line-through" },
   discountBadge: { backgroundColor: "#ee4d2d", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   discountText: { color: "#fff", fontSize: 12, fontWeight: "bold" },
-  productName: { fontSize: 18, color: "#333", paddingHorizontal: 16, marginTop: 8, lineHeight: 24 },
-
-  descriptionContainer: {
-    paddingHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 16,
-    backgroundColor: "#f9f9f9",
-    padding: 12,
-    borderRadius: 12,
-  },
-  descriptionTitle: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 8 },
-  descriptionText: { fontSize: 14, color: "#444", lineHeight: 22, textAlign: "justify" },
+  productName: { fontSize: 18, color: "#333", paddingHorizontal: 16, marginTop: 8 },
+  descriptionContainer: { paddingHorizontal: 16, marginTop: 12, backgroundColor: "#f9f9f9", padding: 12, borderRadius: 12 },
+  descriptionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
+  descriptionText: { fontSize: 14, color: "#444", lineHeight: 22 },
 
   ratingSection: { paddingHorizontal: 16, marginTop: 8 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  avgRating: { fontSize: 16, fontWeight: "600", color: "#333" },
+  avgRating: { fontSize: 16, fontWeight: "600" },
   reviewCount: { fontSize: 14, color: "#777" },
-
   reviewsTitleContainer: { paddingHorizontal: 16, marginTop: 20, marginBottom: 12 },
-  reviewsTitle: { fontSize: 16, fontWeight: "bold", color: "#333" },
+  reviewsTitle: { fontSize: 16, fontWeight: "bold" },
 
   reviewItem: { backgroundColor: "#f9f9f9", padding: 12, borderRadius: 12, marginBottom: 12, marginHorizontal: 16 },
   reviewHeader: { flexDirection: "row", gap: 10, marginBottom: 8 },
-  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#2e7d32", justifyContent: "center", alignItems: "center" },
-  avatarText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+  avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#ddd" },
   userInfo: { flex: 1 },
-  userName: { fontSize: 14, fontWeight: "600", color: "#333" },
+  userName: { fontSize: 14, fontWeight: "600" },
   reviewComment: { fontSize: 14, color: "#555", lineHeight: 20, marginBottom: 8 },
-  reviewImage: { width: "100%", height: 120, borderRadius: 8, marginBottom: 8 },
+  reviewImage: { width: 80, height: 80, borderRadius: 8 },
   reviewDate: { fontSize: 12, color: "#999" },
 
-  // TÌM KIẾM
-  searchPlaceholder: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 },
-  searchPlaceholderText: { marginTop: 16, fontSize: 16, color: "#999", textAlign: "center" },
-  loadingBox: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyBox: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 32 },
-  emptyText: { marginTop: 16, fontSize: 16, color: "#999", textAlign: "center" },
-
-  // KẾT QUẢ TÌM KIẾM
-  resultCard: {
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 12,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    width: "48%",
-    marginBottom: 12,
-  },
-  resultImgWrap: { width: "100%", height: 100, borderRadius: 12, overflow: "hidden", marginBottom: 8, backgroundColor: "#f0f0f0" },
+  resultCard: { backgroundColor: "#fff", borderRadius: 16, padding: 12, elevation: 3, width: "48%", marginBottom: 12 },
+  resultImgWrap: { width: "100%", height: 100, borderRadius: 12, overflow: "hidden", backgroundColor: "#f0f0f0" },
   resultImg: { width: "100%", height: "100%" },
-  resultName: { fontSize: 15, fontWeight: "600", color: "#333", minHeight: 40 },
+  resultName: { fontSize: 15, fontWeight: "600", minHeight: 40 },
   resultPriceRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 6 },
   resultDiscPrice: { fontSize: 15, fontWeight: "bold", color: "#e67e22" },
   resultOrigPrice: { fontSize: 13, color: "#999", textDecorationLine: "line-through" },
-  resultRatingRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 4 },
-  resultRating: { fontSize: 13, color: "#333", fontWeight: "600" },
 
-  // BOTTOM BAR
-  bottomBar: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-    elevation: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-    justifyContent: "space-around",
-    marginBottom: 10,
-  },
-  shopBtn: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
+  bottomBar: { marginBottom: 5, position: "absolute", bottom: 0, left: 0, right: 0, height: 70, flexDirection: "row", backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#eee", paddingHorizontal: 12, paddingVertical: 10, alignItems: "center" },
+  shopBtn: { flex: 1, alignItems: "center", gap: 4 },
   shopText: { fontSize: 11, color: "#666" },
-  chatBtn: { flex: 1, alignItems: "center", justifyContent: "center", gap: 4 },
+  chatBtn: { flex: 1, alignItems: "center", gap: 4 },
   chatText: { fontSize: 11, color: "#666" },
-  addToCartBtn: {
-    flex: 2.3,
-    height: 48,
-    backgroundColor: "#fff",
-    borderWidth: 2,
-    borderColor: "#2ecc71",
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginHorizontal: 6,
-    elevation: 4,
-  },
+  addToCartBtn: { marginRight: 4, flex: 2.3, height: 48, backgroundColor: "#fff", borderWidth: 2, borderColor: "#2ecc71", borderRadius: 12, justifyContent: "center", alignItems: "center" },
   addToCartText: { color: "#2ecc71", fontWeight: "bold", fontSize: 15 },
-  buyNowBtn: {
-    flex: 2.3,
-    height: 48,
-    backgroundColor: "#2ecc71",
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    marginHorizontal: 6,
-    elevation: 4,
-  },
+  buyNowBtn: { marginLeft: 4, flex: 2.3, height: 48, backgroundColor: "#2ecc71", borderRadius: 12, justifyContent: "center", alignItems: "center" },
   buyNowText: { color: "#fff", fontWeight: "bold", fontSize: 15 },
+
+  emptyBox: { flex: 1, justifyContent: "center", alignItems: "center" },
+  emptyText: { marginTop: 16, fontSize: 16, color: "#999" },
 });

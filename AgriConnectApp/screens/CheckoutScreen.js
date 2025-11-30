@@ -134,9 +134,14 @@ const CheckoutScreen = ({ navigation, route }) => {
         items: items.map((item) => ({
           id: item.id,
           name: item.name,
-          imageUrl: item.imageUrl,
+          imageUrl: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
           price: item.price,
           quantity: item.quantity,
+          discount: item.discount || 0,
+          originalPrice: item.originalPrice || item.price,
+          sellerId: item.sellerId || "unknown",
+          farmerName: item.farmerName || "Nông dân",
+          farmerAvatarUrl: item.farmerAvatarUrl || null,
         })),
         totalPrice,
         shippingFee,
@@ -150,28 +155,26 @@ const CheckoutScreen = ({ navigation, route }) => {
         },
         status: "pending",
         createdAt: firestore.FieldValue.serverTimestamp(),
+        reviewed: false,
       };
-
       // 1. Tạo đơn hàng
       const orderRef = await firestore().collection("orders").add(orderData);
-
       // 2. Xóa sản phẩm đã chọn khỏi giỏ hàng
       const cartRef = firestore().collection("carts").doc(uid);
       await firestore().runTransaction(async (transaction) => {
         const cartDoc = await transaction.get(cartRef);
-        if (cartDoc.exists && cartDoc.data().items) {
-          const remainingItems = cartDoc
-            .data()
-            .items.filter((cartItem) => !items.some((selected) => selected.id === cartItem.id));
+        if (cartDoc.exists && cartDoc.data()?.items) {
+          const remainingItems = cartDoc.data().items.filter(
+            (cartItem) => !items.some((selected) => selected.id === cartItem.id)
+          );
           transaction.set(cartRef, { items: remainingItems }, { merge: true });
         }
       });
-
       // 3. Chuyển sang màn thành công
       navigation.replace("OrderSuccess", {
         orderId: orderRef.id,
         finalTotal,
-        items,
+        items: orderData.items,
         shippingMethod: shippingMethod.name,
         paymentMethod: paymentMethod.name,
       });

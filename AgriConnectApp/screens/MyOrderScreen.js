@@ -67,6 +67,7 @@ const MyOrderScreen = ({ navigation, route }) => {
     const unsubscribe = firestore()
       .collection("orders")
       .where("userId", "==", uid)
+      .orderBy("updatedAt", "desc")
       .orderBy("createdAt", "desc")
       .onSnapshot(
         (snapshot) => {
@@ -74,6 +75,8 @@ const MyOrderScreen = ({ navigation, route }) => {
             id: doc.id,
             ...doc.data(),
             createdAt: doc.data().createdAt?.toDate(),
+            updatedAt: doc.data().updatedAt?.toDate(),
+            deliveredAt: doc.data().deliveredAt?.toDate(),
           }));
           setOrders(ordersList);
           setLoading(false);
@@ -181,6 +184,7 @@ const MyOrderScreen = ({ navigation, route }) => {
     const isConfirmed = item.status === "confirmed";
     const isShipped = item.status === "shipping";
     const isCancelled = item.status === "cancelled";
+    const isReviewed = item.reviewed === true;
 
     const formatDate = (date) => {
       if (!date) return "Chưa xác định";
@@ -204,6 +208,26 @@ const MyOrderScreen = ({ navigation, route }) => {
           <View style={styles.shopInfo}>
             <Text style={styles.shopName}>Thông tin đơn hàng</Text>
             <Text style={styles.orderId}>Mã đơn hàng: {item.id}</Text>
+            
+            {/* Chỉ hiện khi đã giao */}
+            {item.status === "shipping" && (
+            <Text style={styles.orderId}>
+              Đã giao lúc:{" "}
+              {(() => {
+                const dateObj = item.deliveredAt || item.updatedAt || item.createdAt;
+                return dateObj
+                  ? dateObj.toLocaleString("vi-VN", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })
+                  : "Chưa xác định";
+              })()}
+            </Text>
+          )}
           </View>
           <Text
             style={[
@@ -302,6 +326,7 @@ const MyOrderScreen = ({ navigation, route }) => {
           </View>
         </View>
 
+        {/* === PHẦN NÚT HÀNH ĐỘNG ĐÃ ĐƯỢC CẬP NHẬT HOÀN CHỈNH === */}
         <View style={styles.actionButtons}>
           {isPending && (
             <>
@@ -338,17 +363,31 @@ const MyOrderScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           )}
 
+          {/* ĐÃ GIAO */}
           {isShipped && (
             <>
-              <TouchableOpacity
-                style={styles.reviewBtn}
-                onPress={(e) => {
-                  e.stopPropagation();
-                  navigation.navigate("Review", { orderId: item.id });
-                }}
-              >
-                <Text style={styles.reviewText}>Viết đánh giá</Text>
-              </TouchableOpacity>
+              {/* Chưa đánh giá → hiện nút Viết đánh giá */}
+              {!isReviewed && (
+                <TouchableOpacity
+                  style={styles.reviewBtn}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    navigation.navigate("Review", { orderId: item.id });
+                  }}
+                >
+                  <Text style={styles.reviewText}>Viết đánh giá</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Đã đánh giá → hiện "Đã đánh giá" với tick xanh */}
+              {isReviewed && (
+                <View style={styles.reviewedBtn}>
+                  <Icon name="checkmark-circle" size={18} color="#27ae60" />
+                  <Text style={styles.reviewedText}>Đã đánh giá</Text>
+                </View>
+              )}
+
+              {/* Nút Mua lại luôn hiện khi đã giao */}
               <TouchableOpacity
                 style={styles.buyAgainBtn}
                 onPress={(e) => {
@@ -623,6 +662,25 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buyAgainText: { color: "#fff", fontSize: 14, fontWeight: "600" },
+
+  // 2 STYLE MỚI CHO "ĐÃ ĐÁNH GIÁ"
+  reviewedBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#e8f5e9",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#27ae60",
+  },
+  reviewedText: {
+    color: "#27ae60",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+
   emptyContainer: {
     flex: 1,
     justifyContent: "center",

@@ -25,7 +25,7 @@ const BuyerProfileScreen = ({ navigation }) => {
   const [pendingOrders, setPendingOrders] = useState([]);
   const [confirmedOrders, setConfirmedOrders] = useState([]);
   const [shippingOrders, setShippingOrders] = useState([]);
-  const [deliveredOrders, setDeliveredOrders] = useState([]);
+  const [unreviewedOrdersCount, setUnreviewedOrdersCount] = useState(0);
 
   useEffect(() => {
     const uid = auth().currentUser?.uid;
@@ -53,34 +53,27 @@ const BuyerProfileScreen = ({ navigation }) => {
           const pending = [];
           const confirmed = [];
           const shipping = [];
-          const delivered = [];
+          let unreviewedCount = 0;
 
           snapshot.forEach((doc) => {
             const order = { id: doc.id, ...doc.data() };
-            switch (order.status) {
-              case "pending":
-                pending.push(order);
-                break;
-              case "confirmed":
-                confirmed.push(order);
-                break;
-              case "shipping":
-                shipping.push(order);
-                break;
-              case "delivered":
-                delivered.push(order);
-                break;
-              case "cancelled":
-                break;
-              default:
-                pending.push(order);
+
+            if (order.status === "shipping" || order.status === "delivered") {
+              shipping.push(order);
+              if (!order.reviewed) {
+                unreviewedCount++;
+              }
+            } else if (order.status === "pending") {
+              pending.push(order);
+            } else if (order.status === "confirmed") {
+              confirmed.push(order);
             }
           });
 
           setPendingOrders(pending);
           setConfirmedOrders(confirmed);
           setShippingOrders(shipping);
-          setDeliveredOrders(delivered);
+          setUnreviewedOrdersCount(unreviewedCount);
         },
         (error) => {
           console.error("Lỗi tải đơn hàng:", error);
@@ -233,13 +226,14 @@ const BuyerProfileScreen = ({ navigation }) => {
           </Text>
         </TouchableOpacity>
 
+        {/* SỬA CHỖ NÀY - HIỂN THỊ ĐÚNG SỐ ĐƠN CHƯA ĐÁNH GIÁ */}
         <TouchableOpacity
           style={styles.statusItem}
           onPress={() => navigation.navigate("ListReview")}
         >
           <Icon name="star-outline" size={24} color="#f1c40f" />
           <Text style={styles.statusText}>
-            Đánh giá ({deliveredOrders.length})
+            Đánh giá ({unreviewedOrdersCount})
           </Text>
         </TouchableOpacity>
       </View>

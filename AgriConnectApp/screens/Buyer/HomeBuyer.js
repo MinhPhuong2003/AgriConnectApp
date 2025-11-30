@@ -167,7 +167,7 @@ const HomeBuyer = ({ route, navigation }) => {
   const addToCart = async (product) => {
     const user = auth().currentUser;
     if (!user) {
-      alert("Vui lòng đăng nhập để thêm vào giỏ hàng!");
+      Alert.alert("Thông báo", "Vui lòng đăng nhập để thêm vào giỏ hàng!");
       return;
     }
 
@@ -184,25 +184,35 @@ const HomeBuyer = ({ route, navigation }) => {
 
         const existingIndex = cartItems.findIndex((item) => item.id === product.id);
 
+        const discountedPrice = Math.round(product.price * (1 - (product.discount || 0) / 100));
+
+        const cartItem = {
+          id: product.id,
+          name: product.name,
+          price: discountedPrice,
+          originalPrice: product.price,
+          discount: product.discount || 0,
+          imageUrl: product.imageUrl || PLACEHOLDER,
+          quantity: 1,
+          sellerId: product.sellerId || product.farmerId || "unknown", 
+          farmerName: product.farmerName || product.sellerName || "Nông dân", 
+          farmerAvatarUrl: product.farmerAvatarUrl || product.sellerAvatarUrl || null,
+        };
+
         if (existingIndex >= 0) {
           cartItems[existingIndex].quantity += 1;
+          cartItems[existingIndex].sellerId = cartItem.sellerId;
+          cartItems[existingIndex].farmerName = cartItem.farmerName;
+          cartItems[existingIndex].farmerAvatarUrl = cartItem.farmerAvatarUrl;
         } else {
-          cartItems.push({
-            id: product.id,
-            name: product.name,
-            price: Math.round(product.price * (1 - (product.discount || 0) / 100)),
-            originalPrice: product.price,
-            discount: product.discount || 0,
-            imageUrl: product.imageUrl || PLACEHOLDER,
-            quantity: 1,
-          });
+          cartItems.push(cartItem);
         }
 
         transaction.set(cartRef, { items: cartItems }, { merge: true });
       });
     } catch (error) {
       console.error("Lỗi thêm vào giỏ:", error);
-      alert("Không thể thêm vào giỏ. Vui lòng thử lại.");
+      Alert.alert("Lỗi", "Không thể thêm vào giỏ. Vui lòng thử lại.");
     }
   };
 
@@ -234,24 +244,77 @@ const HomeBuyer = ({ route, navigation }) => {
     }
   }, []);
 
-  // === LẤY SẢN PHẨM ===
   useEffect(() => {
-    const q = firestore().collection("products").where("available", "==", true);
-    const unsubscribe = q.onSnapshot(
-      (snapshot) => {
-        const list = snapshot.docs.map((doc) => ({
+    let isMounted = true;
+    // 1. Load sản phẩm lần đầu
+    const loadProducts = async () => {
+      try {
+        const snap = await firestore()
+          .collection("products")
+          .where("available", "==", true)
+          .get();
+
+        if (!isMounted) return;
+
+        const list = snap.docs.map(doc => ({
           id: doc.id,
           ...doc.data(),
+          avgRating: "5.0",
+          reviewsCount: 0,
         }));
+
         setProducts(list);
         setLoading(false);
-      },
-      (error) => {
-        console.error("Lỗi tải sản phẩm:", error);
-        setLoading(false);
+      } catch (err) {
+        console.error("Lỗi load sản phẩm:", err);
+        if (isMounted) setLoading(false);
       }
-    );
-    return () => unsubscribe();
+    };
+    loadProducts();
+    // 2. Listener chính – bắt mọi review mới
+    const unsub = firestore()
+      .collection("reviews")
+      .onSnapshot((snapshot) => {
+        if (!isMounted) return;
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added" || change.type === "modified" || change.type === "removed") {
+            const review = change.doc.data();
+            const productId = review.productId;
+            if (productId) {
+              updateProductRating(productId);
+            }
+          }
+        });
+      });
+    // Hàm cập nhật rating cho 1 sản phẩm
+    const updateProductRating = async (productId) => {
+      try {
+        const reviewsSnap = await firestore()
+          .collection("reviews")
+          .where("productId", "==", productId)
+          .get();
+        let total = 0;
+        let count = reviewsSnap.size;
+        reviewsSnap.forEach(doc => {
+          total += doc.data().rating || 0;
+        });
+        const avg = count > 0 ? (total / count) : 5.0;
+        if (isMounted) {
+          setProducts(prev => prev.map(p =>
+            p.id === productId
+              ? { ...p, avgRating: avg.toFixed(1), reviewsCount: count }
+              : p
+          ));
+        }
+      } catch (err) {
+        console.error("Lỗi cập nhật rating:", err);
+      }
+    };
+
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
   // === XỬ LÝ TÌM KIẾM ===
@@ -392,9 +455,9 @@ const HomeBuyer = ({ route, navigation }) => {
           ) : null}
 
           <View style={styles.ratingRow}>
-            <Icon name="star" size={14} color="#ffc107" style={styles.singleStar} />
+            <Icon name="star" size={14} color="#ffc107" />
             <Text style={styles.ratingText}>
-              {item.avgRating ? parseFloat(item.avgRating).toFixed(1) : ""}
+              {item.avgRating || "5.0"}
             </Text>
             <Text style={styles.reviewCount}>
               ({item.reviewsCount || 0} đánh giá)

@@ -215,6 +215,15 @@ const FarmerProfileScreen = ({ navigation }) => {
           <Text style={styles.actionText}>Quản lý đơn hàng</Text>
         </TouchableOpacity>
 
+        {/* NÚT MỚI: QUẢN LÝ ĐƠN HÀNG */}
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => navigation.navigate("PreOrderManagement")}
+        >
+          <Icon name="cart-outline" size={22} color="#2e7d32" />
+          <Text style={styles.actionText}>Quản lý đơn đặt trước</Text>
+        </TouchableOpacity>
+
         <TouchableOpacity
           style={styles.actionBtn}
           onPress={() => navigation.navigate("EditProfile")}
