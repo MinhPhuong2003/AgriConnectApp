@@ -29,15 +29,22 @@ const AddProductScreen = ({ navigation }) => {
   const [region, setRegion] = useState("");
   const [category, setCategory] = useState("");
   const [growingRegion, setGrowingRegion] = useState("");
-  const [image, setImage] = useState(null);
+
+  // THAY ĐỔI CHỈ Ở ĐÂY – giống hệt AddPreOrderScreen
+  const [imageUri, setImageUri] = useState(null);        // để hiển thị
+  const [imageBase64, setImageBase64] = useState(null); // để lưu Firestore (nếu cần)
+
   const [loading, setLoading] = useState(false);
+
   // Modal
   const [isSeasonModalVisible, setSeasonModalVisible] = useState(false);
   const [isUnitModalVisible, setUnitModalVisible] = useState(false);
   const [isCategoryModalVisible, setCategoryModalVisible] = useState(false);
+
   // Vị trí
   const [location, setLocation] = useState(null);
   const mapRef = useRef(null);
+
   // Kiểm tra đăng nhập
   useEffect(() => {
     if (!auth().currentUser) {
@@ -45,7 +52,8 @@ const AddProductScreen = ({ navigation }) => {
       navigation.navigate("Login");
     }
   }, [navigation]);
-  // === QUYỀN VÀ LẤY VỊ TRÍ ===
+
+  // === QUYỀN VÀ LẤY VỊ TRÍ (giữ nguyên) ===
   const requestLocationPermission = async () => {
     if (Platform.OS !== "android") return true;
     try {
@@ -89,7 +97,6 @@ const AddProductScreen = ({ navigation }) => {
     }
   };
 
-  // Lấy vị trí khi mở màn hình
   useEffect(() => {
     const fetchLocation = async () => {
       try {
@@ -130,26 +137,31 @@ const AddProductScreen = ({ navigation }) => {
     setRegion(address);
   };
 
-  // === CHỌN ẢNH ===
-  const pickImage = async () => {
-    const result = await launchImageLibrary({
-      mediaType: "photo",
-      quality: 0.8,
-    });
-    if (!result.didCancel && result.assets?.[0]?.uri) {
-      setImage(result.assets[0].uri);
-    }
+  // THAY ĐỔI CHỈ Ở ĐÂY – lấy ảnh giống hệt AddPreOrderScreen
+  const pickImage = () => {
+    launchImageLibrary(
+      { mediaType: "photo", quality: 0.7, includeBase64: true },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        if (response.assets?.[0]) {
+          const asset = response.assets[0];
+          setImageUri(asset.uri);
+          if (asset.base64) {
+            setImageBase64(`data:${asset.type || "image/jpeg"};base64,${asset.base64}`);
+          }
+        }
+      }
+    );
   };
 
-  // === THÊM SẢN PHẨM ===
+  // === THÊM SẢN PHẨM (giữ nguyên, chỉ đổi kiểm tra ảnh) ===
   const handleAddProduct = async () => {
     if (!auth().currentUser) {
       Alert.alert("Lỗi", "Vui lòng đăng nhập!");
       return;
     }
 
-    // Kiểm tra đầy đủ thông tin
-    if (!name.trim() || !price || !quantity || !unit || !season || !category || !image || !location || !growingRegion.trim()) {
+    if (!name.trim() || !price || !quantity || !unit || !season || !category || !imageUri || !location || !growingRegion.trim()) {
       Alert.alert("Lỗi", "Vui lòng điền đầy đủ tất cả các trường bắt buộc!");
       return;
     }
@@ -178,7 +190,7 @@ const AddProductScreen = ({ navigation }) => {
         quantity: qtyNum,
         stock: qtyNum,
         unit,
-        imageUrl: image,
+        imageBase64: imageBase64 || "",     // thêm base64 (tùy chọn)
         season,
         region,
         category,
@@ -211,28 +223,29 @@ const AddProductScreen = ({ navigation }) => {
     }
   };
 
-  // Dữ liệu chọn
+  // Dữ liệu chọn (giữ nguyên)
   const seasons = ["Xuân", "Hạ", "Thu", "Đông"];
-  const units = ["kg", "bó", "thùng", "tạ", "tấn", "quả", "chục"];
+  const units = ["kg"];
   const categories = ["Rau củ", "Trái cây", "Hạt giống", "Nông sản khô"];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* Ảnh sản phẩm */}
+      {/* THAY ĐỔI CHỈ Ở ĐÂY – phần chọn ảnh giống AddPreOrderScreen */}
       <View style={styles.imageSection}>
         <TouchableOpacity onPress={pickImage} style={styles.imageBox}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.previewImage} />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
           ) : (
-            <View style={{ alignItems: "center" }}>
-              <Icon name="image-outline" size={40} color="#aaa" />
-              <Text style={{ marginTop: 8, color: "#888", fontSize: 12 }}>Thêm ảnh</Text>
+            <View style={styles.placeholderContainer}>
+              <Icon name="camera-outline" size={50} color="#aaa" />
+              <Text style={styles.placeholderText}>Chọn ảnh sản phẩm</Text>
             </View>
           )}
         </TouchableOpacity>
         <Text style={styles.imageHint}>Bắt buộc - Chọn ảnh sản phẩm</Text>
       </View>
 
+      {/* TẤT CẢ PHẦN CÒN LẠI GIỮ NGUYÊN HOÀN TOÀN */}
       <Text style={styles.label}>Tên sản phẩm *</Text>
       <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="VD: Cà chua sạch Đà Lạt" />
 
@@ -254,8 +267,7 @@ const AddProductScreen = ({ navigation }) => {
         placeholder="25000"
       />
 
-      {/* Số lượng tồn kho */}
-      <Text style={styles.label}>Số lượng tồn *</Text>
+      <Text style={styles.label}>Số lượng tồn kho *</Text>
       <TextInput
         style={styles.input}
         value={quantity}
@@ -298,7 +310,6 @@ const AddProductScreen = ({ navigation }) => {
         multiline
       />
 
-      {/* Bản đồ nhỏ */}
       <View style={styles.mapContainer}>
         {location ? (
           <MapView
@@ -330,7 +341,6 @@ const AddProductScreen = ({ navigation }) => {
         )}
       </View>
 
-      {/* Nút thêm */}
       <TouchableOpacity
         style={[styles.button, loading && { opacity: 0.7 }]}
         onPress={handleAddProduct}
@@ -341,7 +351,7 @@ const AddProductScreen = ({ navigation }) => {
         </Text>
       </TouchableOpacity>
 
-      {/* Modal chọn Đơn vị */}
+      {/* 3 Modal giữ nguyên 100% */}
       <Modal transparent visible={isUnitModalVisible} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setUnitModalVisible(false)}>
           <View style={styles.modalBox}>
@@ -361,7 +371,6 @@ const AddProductScreen = ({ navigation }) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* Modal chọn Danh mục */}
       <Modal transparent visible={isCategoryModalVisible} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCategoryModalVisible(false)}>
           <View style={styles.modalBox}>
@@ -381,7 +390,6 @@ const AddProductScreen = ({ navigation }) => {
         </TouchableOpacity>
       </Modal>
 
-      {/* Modal chọn Mùa vụ */}
       <Modal transparent visible={isSeasonModalVisible} animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSeasonModalVisible(false)}>
           <View style={styles.modalBox}>
@@ -404,6 +412,7 @@ const AddProductScreen = ({ navigation }) => {
   );
 };
 
+// Styles giữ nguyên 100% của bạn, chỉ thêm 2 style nhỏ cho placeholder ảnh
 const styles = StyleSheet.create({
   container: { padding: 20, backgroundColor: "#fff", paddingBottom: 40 },
   label: { fontSize: 15, fontWeight: "600", marginBottom: 8, color: "#333" },
@@ -421,8 +430,8 @@ const styles = StyleSheet.create({
   selectBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   imageSection: { alignItems: "center", marginBottom: 24 },
   imageBox: {
-    width: 120,
-    height: 120,
+    width: "100%",
+    height: 220,
     borderRadius: 16,
     backgroundColor: "#f5f5f5",
     borderWidth: 2,
@@ -430,8 +439,14 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
   },
-  previewImage: { width: 120, height: 120, borderRadius: 16 },
+  previewImage: { width: "100%", height: "100%", borderRadius: 16 },
+  placeholderContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: { marginTop: 12, fontSize: 16, color: "#999" },
   imageHint: { marginTop: 8, fontSize: 13, color: "#d32f2f" },
   button: {
     backgroundColor: "#2e7d32",

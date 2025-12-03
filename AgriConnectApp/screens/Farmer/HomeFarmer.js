@@ -225,7 +225,7 @@ const HomeFarmer = ({ navigation }) => {
 
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: "#3498db" }]}
-          onPress={() => navigation.navigate("MyOrders")}
+          onPress={() => navigation.navigate("OrderManagement")}
         >
           <Icon name="basket" size={32} color="#fff" />
           <Text style={styles.actionText}>Đơn hàng</Text>
@@ -233,7 +233,7 @@ const HomeFarmer = ({ navigation }) => {
 
         <TouchableOpacity
           style={[styles.actionBtn, { backgroundColor: "#9b59b6" }]}
-          onPress={() => navigation.navigate("ChatList")}
+          onPress={() => navigation.navigate("Chat")}
         >
           <Icon name="chatbubbles" size={32} color="#fff" />
           <Text style={styles.actionText}>Tin nhắn</Text>

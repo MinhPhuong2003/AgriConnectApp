@@ -14,7 +14,9 @@ import Icon from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
 
-const OrderDetailScreen = ({ navigation, route }) => {
+const DEFAULT_AVATAR = "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img";
+
+const PreOrderDetailScreen = ({ navigation, route }) => {
   const { orderId } = route.params || {};
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -27,24 +29,26 @@ const OrderDetailScreen = ({ navigation, route }) => {
     }
 
     const unsubscribe = firestore()
-      .collection("orders")
+      .collection("preOrderBookings")
       .doc(orderId)
       .onSnapshot(
         (doc) => {
           if (doc.exists) {
+            const data = doc.data();
             setOrder({
               id: doc.id,
-              ...doc.data(),
-              createdAt: doc.data().createdAt?.toDate(),
+              ...data,
+              createdAt: data.createdAt?.toDate(),
+              updatedAt: data.updatedAt?.toDate(),
             });
           } else {
-            Alert.alert("Lỗi", "Đơn hàng không tồn tại.");
+            Alert.alert("Lỗi", "Đơn đặt trước không tồn tại.");
           }
           setLoading(false);
         },
         (error) => {
-          console.error("Lỗi tải đơn hàng:", error);
-          Alert.alert("Lỗi", "Không thể tải thông tin đơn hàng.");
+          console.error("Lỗi tải đơn đặt trước:", error);
+          Alert.alert("Lỗi", "Không thể tải thông tin đơn đặt trước.");
           setLoading(false);
         }
       );
@@ -53,15 +57,41 @@ const OrderDetailScreen = ({ navigation, route }) => {
   }, [orderId]);
 
   const handleCancelOrder = () => {
-    if (!order) return;
-    navigation.navigate("CancelOrder", { order });
+    Alert.alert(
+      "Hủy đơn đặt trước",
+      "Bạn có chắc chắn muốn hủy đơn này không?",
+      [
+        { text: "Không", style: "cancel" },
+        {
+          text: "Hủy đơn",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await firestore()
+                .collection("preOrderBookings")
+                .doc(orderId)
+                .update({
+                  status: "cancelled",
+                  cancelReason: "Khách hàng hủy đơn",
+                  updatedAt: firestore.FieldValue.serverTimestamp(),
+                });
+              Alert.alert("Thành công", "Đơn đặt trước đã được hủy.");
+            } catch (err) {
+              console.error(err);
+              Alert.alert("Lỗi", "Không thể hủy đơn đặt trước.");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleGoHome = () => {
+    navigation.popToTop();
     navigation.navigate("HomeBuyer");
   };
 
-  const handleBuyAgain = async (order) => {
+  const handleBuyAgain = async () => {
     const uid = auth().currentUser?.uid;
     if (!uid) {
       Alert.alert("Lỗi", "Vui lòng đăng nhập để mua lại.");
@@ -70,25 +100,21 @@ const OrderDetailScreen = ({ navigation, route }) => {
 
     try {
       const cartRef = firestore().collection("carts").doc(uid);
-      const orderItemIds = order.items.map(item => item.id);
-
-      const newItems = order.items.map((item) => ({
-        id: item.id,
-        name: item.name || "Sản phẩm",
-        imageUrl: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
-        price: item.price || 0,
-        quantity: item.quantity || 1,
-        variant: item.variant || null,
+      const newItems = order.products.map((prod) => ({
+        id: prod.preOrderId || prod.id || prod.cropId || `pre_${order.id}_${prod.cropName}`,
+        name: prod.cropName || "Sản phẩm đặt trước",
+        imageUrl: prod.imageUrl || DEFAULT_AVATAR,
+        price: prod.pricePerKg || 0,
+        quantity: prod.quantity || 1,
         selected: true,
-      })).filter(item => item.id);
+      }));
 
       await firestore().runTransaction(async (transaction) => {
         const cartDoc = await transaction.get(cartRef);
         let items = [];
 
         if (cartDoc.exists) {
-          const data = cartDoc.data();
-          items = (data?.items || []).filter(i => i && i.id);
+          items = (cartDoc.data()?.items || []).filter((i) => i && i.id);
         }
 
         newItems.forEach((newItem) => {
@@ -101,16 +127,10 @@ const OrderDetailScreen = ({ navigation, route }) => {
           }
         });
 
-        items = items.map((item) => ({
-          ...item,
-          selected: orderItemIds.includes(item.id),
-        }));
-
         transaction.set(cartRef, { items }, { merge: true });
       });
 
       navigation.navigate("Cart");
-
     } catch (error) {
       console.error("Lỗi mua lại:", error);
       navigation.navigate("Cart");
@@ -128,7 +148,7 @@ const OrderDetailScreen = ({ navigation, route }) => {
   if (!order) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>Không tìm thấy đơn hàng.</Text>
+        <Text style={styles.errorText}>Không tìm thấy đơn đặt trước.</Text>
       </View>
     );
   }
@@ -149,11 +169,15 @@ const OrderDetailScreen = ({ navigation, route }) => {
       .replace(/\//g, "/");
   };
 
-  const totalAmount = (order.totalPrice || 0) + (order.shippingFee || 0);
-
+  const totalProduct = order.products.reduce(
+    (sum, prod) => sum + (prod.quantity * (prod.pricePerKg || 0)),
+    0
+  );
+  const totalAmount = totalProduct + (order.shippingFee || 0);
   const isPending = order.status === "pending";
+  const isWaitingDelivery = order.status === "waitingDelivery";
   const isConfirmed = order.status === "confirmed";
-  const isShipped = order.status === "shipping";
+  const isCompleted = order.status === "completed";
   const isCancelled = order.status === "cancelled";
 
   return (
@@ -164,80 +188,56 @@ const OrderDetailScreen = ({ navigation, route }) => {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={26} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Chi tiết đơn hàng</Text>
+          <Text style={styles.headerTitle}>CHI TIẾT ĐƠN ĐẶT TRƯỚC</Text>
           <View style={{ width: 26 }} />
         </View>
 
         {/* Trạng thái đơn hàng */}
         {!isCancelled ? (
-          <View style={styles.orderStatus}>
-            <View style={styles.progressBar}>
-              <View style={styles.stepContainer}>
-                <Icon
-                  name="checkmark-circle"
-                  size={22}
-                  color={isPending || isConfirmed || isShipped ? "#2e7d32" : "#ccc"}
-                />
+        <View style={styles.orderStatus}>
+            <View style={styles.progressContainer}>
+            {[
+                { label: "Chờ xác nhận", active: isPending || isWaitingDelivery || isConfirmed || isCompleted },
+                { label: "Chờ giao",       active: isWaitingDelivery || isConfirmed || isCompleted },
+                { label: "Đang vận chuyển", active: isConfirmed || isCompleted },
+                { label: "Đã giao",        active: isCompleted },
+            ].map((step, index) => (
+                <View key={index} style={styles.stepWrapper}>
+                <View style={styles.stepCircle}>
+                    <Icon
+                    name={step.active ? "checkmark-circle" : "ellipse-outline"}
+                    size={28}
+                    color={step.active ? "#2e7d32" : "#ccc"}
+                    />
+                </View>
                 <Text
-                  style={[
-                    styles.progressLabel,
-                    (isPending || isConfirmed || isShipped) && styles.progressLabelActive,
-                  ]}
+                    style={[
+                    styles.stepLabel,
+                    step.active && styles.stepLabelActive,
+                    ]}
                 >
-                  Chờ xác nhận
+                    {step.label}
                 </Text>
-              </View>
 
-              <View
-                style={[
-                  styles.progressLine,
-                  (isConfirmed || isShipped) && styles.progressLineActive,
-                ]}
-              />
-
-              <View style={styles.stepContainer}>
-                <Icon
-                  name={isConfirmed || isShipped ? "checkmark-circle" : "ellipse-outline"}
-                  size={22}
-                  color={isConfirmed || isShipped ? "#2e7d32" : "#ccc"}
-                />
-                <Text
-                  style={[
-                    styles.progressLabel,
-                    (isConfirmed || isShipped) && styles.progressLabelActive,
-                  ]}
-                >
-                  Đang vận chuyển
-                </Text>
-              </View>
-
-              <View
-                style={[
-                  styles.progressLine,
-                  isShipped && styles.progressLineActive,
-                ]}
-              />
-
-              <View style={styles.stepContainer}>
-                <Icon
-                  name={isShipped ? "checkmark-circle" : "ellipse-outline"}
-                  size={22}
-                  color={isShipped ? "#2e7d32" : "#ccc"}
-                />
-                <Text
-                  style={[
-                    styles.progressLabel,
-                    isShipped && styles.progressLabelActive,
-                  ]}
-                >
-                  Đã giao
-                </Text>
-              </View>
+                {index < 3 && (
+                    <View
+                    style={[
+                        styles.connectorLine,
+                        (index === 0 && (isWaitingDelivery || isConfirmed || isCompleted)) ||
+                        (index === 1 && (isConfirmed || isCompleted)) ||
+                        (index === 2 && isCompleted)
+                        ? styles.connectorLineActive
+                        : null,
+                    ]}
+                    />
+                )}
+                </View>
+            ))}
             </View>
-          </View>
+        </View>
         ) : (
           <View style={styles.cancelledStatusContainer}>
-            <Text style={styles.cancelledStatusText}>Đơn hàng đã bị hủy</Text>
+            <Text style={styles.cancelledStatusText}>Đơn đặt trước đã bị hủy</Text>
             {order.cancelReason && (
               <Text style={styles.cancelReasonText}>Lý do: {order.cancelReason}</Text>
             )}
@@ -249,15 +249,15 @@ const OrderDetailScreen = ({ navigation, route }) => {
           <Text style={styles.infoTitle}>Thông tin người nhận hàng</Text>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Người nhận</Text>
-            <Text style={styles.infoValue}>{order.address?.name || "Khách hàng"}</Text>
+            <Text style={styles.infoValue}>{order.buyerName || "Khách lẻ"}</Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Số điện thoại</Text>
-            <Text style={styles.infoValue}>{order.address?.phone || "(+84) 912 345 678"}</Text>
+            <Text style={styles.infoValue}>{order.buyerPhone || "(+84) ..."}</Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Địa chỉ</Text>
-            <Text style={styles.addressValue}>{order.address?.address || "Chưa có địa chỉ"}</Text>
+            <Text style={styles.addressValue}>{order.buyerAddress || "Chưa có địa chỉ"}</Text>
           </View>
         </View>
 
@@ -265,27 +265,25 @@ const OrderDetailScreen = ({ navigation, route }) => {
         <View style={styles.productSection}>
           <Text style={styles.sectionTitle}>Thông tin sản phẩm</Text>
           <FlatList
-            data={order.items}
-            keyExtractor={(item) => item.id}
+            data={order.products}
+            keyExtractor={(item, index) => item.id || index.toString()}
             renderItem={({ item }) => (
               <View style={styles.productItem}>
                 <Image
-                  source={{
-                    uri: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
-                  }}
+                  source={{ uri: item.imageUrl || DEFAULT_AVATAR }}
                   style={styles.productImage}
                 />
                 <View style={styles.productDetails}>
                   <Text style={styles.productName} numberOfLines={2}>
-                    {item.name}
+                    {item.cropName}
                   </Text>
-                  <Text style={styles.productQuantity}>Số lượng: {item.quantity}</Text>
+                  <Text style={styles.productQuantity}>Số lượng: {item.quantity}kg</Text>
                   <Text style={styles.productPrice}>
-                    {item.price.toLocaleString("vi-VN")}đ
+                    {item.pricePerKg?.toLocaleString("vi-VN")}đ/kg
                   </Text>
                 </View>
                 <Text style={styles.productTotal}>
-                  {(item.price * item.quantity).toLocaleString("vi-VN")}đ
+                  {(item.quantity * item.pricePerKg).toLocaleString("vi-VN")}đ
                 </Text>
               </View>
             )}
@@ -302,24 +300,24 @@ const OrderDetailScreen = ({ navigation, route }) => {
             <Text style={styles.paymentLabel}>Mã đơn hàng</Text>
             <Text style={styles.paymentValue}>{order.id}</Text>
           </View>
-          <View style={styles.paymentItem}>
-            <Text style={styles.paymentLabel}>Phương thức thanh toán</Text>
-            <Text style={styles.paymentValue}>{order.paymentMethod || "Chưa xác định"}</Text>
-          </View>
-          <View style={styles.paymentItem}>
+            <View style={styles.paymentItem}>
+                <Text style={styles.paymentLabel}>Phương thức thanh toán</Text>
+                <Text style={styles.paymentValue}>{order.paymentMethod || "Chưa xác định"}</Text>
+            </View>
+            <View style={styles.paymentItem}>
             <Text style={styles.paymentLabel}>Thời gian đặt hàng</Text>
             <Text style={styles.paymentValue}>{formatDate(order.createdAt)}</Text>
           </View>
           <View style={styles.paymentItem}>
             <Text style={styles.paymentLabel}>Tổng tiền sản phẩm</Text>
             <Text style={styles.paymentValue}>
-              {order.totalPrice?.toLocaleString("vi-VN") || "0"}đ
+              {totalProduct.toLocaleString("vi-VN")}đ
             </Text>
           </View>
           <View style={styles.paymentItem}>
             <Text style={styles.paymentLabel}>Phí vận chuyển</Text>
             <Text style={styles.paymentValue}>
-              {order.shippingFee?.toLocaleString("vi-VN") || "0"}đ
+              {(order.shippingFee || 0).toLocaleString("vi-VN")}đ
             </Text>
           </View>
           <View style={styles.paymentItem}>
@@ -328,49 +326,34 @@ const OrderDetailScreen = ({ navigation, route }) => {
               {totalAmount.toLocaleString("vi-VN")}đ
             </Text>
           </View>
+          {order.note && order.note.trim() !== "" && (
+            <View style={styles.noteContainer}>
+                <Text style={styles.paymentLabel}>Ghi chú</Text>
+                <View style={styles.noteBox}>
+                <Text style={styles.noteText}>{order.note.trim()}</Text>
+                </View>
+            </View>
+            )}
         </View>
 
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Nút cố định dưới cùng */}
-      {isShipped && (
-        <View style={styles.fixedButtonContainer}>
-          {!order.reviewed && (
-            <TouchableOpacity
-              style={styles.reviewButton}
-              onPress={() => navigation.navigate("Review", { orderId: order.id })}
-            >
-              <Text style={[styles.buttonText, { color: "#2e7d32" }]}>Viết đánh giá</Text>
-            </TouchableOpacity>
-          )}
-
-          {order.reviewed && (
-            <View style={styles.reviewedFixedButton}>
-              <Icon name="checkmark-circle" size={20} color="#27ae60" />
-              <Text style={styles.reviewedFixedText}>Đã đánh giá</Text>
-            </View>
-          )}
-
-          <TouchableOpacity
-            style={[
-              styles.buyAgainButton,
-              order.reviewed ? styles.buyAgainButtonReviewed : styles.buyAgainButtonNormal
-            ]}
-            onPress={() => handleBuyAgain(order)}
-          >
-            <Text style={styles.buttonText}>Mua lại</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {isPending && (
         <View style={styles.fixedButtonContainer}>
-          <TouchableOpacity style={styles.cancelButton} onPress={handleCancelOrder}>
+          <TouchableOpacity style={styles.cancelButton} onPress={() => navigation.navigate("CancelPreOrder", { order })}>
             <Text style={styles.buttonText}>Hủy đơn hàng</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.homeButton} onPress={handleGoHome}>
             <Text style={styles.buttonText}>Về trang chủ</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {isCompleted && (
+        <View style={styles.fixedButtonContainer}>
+          <TouchableOpacity style={styles.buyAgainButton} onPress={handleBuyAgain}>
+            <Text style={styles.buttonText}>Mua lại</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -395,17 +378,49 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
   },
   headerTitle: { fontSize: 18, fontWeight: "bold", color: "#000" },
-
-  // Progress Bar
-  orderStatus: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
-  progressBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  stepContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
-  progressLine: { width: 40, height: 2, backgroundColor: "#ddd", marginHorizontal: 8 },
-  progressLineActive: { backgroundColor: "#2e7d32" },
-  progressLabel: { marginTop: 6, fontSize: 11, color: "#999", textAlign: "center" },
-  progressLabelActive: { color: "#2e7d32", fontWeight: "600" },
-
-  // Đơn bị hủy
+  orderStatus: {
+    backgroundColor: "#fff",
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginTop: 8,
+    },
+    progressContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    },
+    stepWrapper: {
+    flex: 1,
+    alignItems: "center",
+    position: "relative",
+    },
+    stepCircle: {
+    zIndex: 1,
+    backgroundColor: "#fff",
+    },
+    stepLabel: {
+    marginTop: 8,
+    fontSize: 11.5,
+    color: "#999",
+    textAlign: "center",
+    fontWeight: "500",
+    },
+    stepLabelActive: {
+    color: "#2e7d32",
+    fontWeight: "600",
+    },
+    connectorLine: {
+    position: "absolute",
+    top: 14,
+    left: "50%",
+    right: "-50%",
+    height: 3,
+    backgroundColor: "#ddd",
+    zIndex: 0,
+    },
+    connectorLineActive: {
+    backgroundColor: "#2e7d32",
+    },
   cancelledStatusContainer: {
     backgroundColor: "#fdf2f2",
     padding: 16,
@@ -417,16 +432,12 @@ const styles = StyleSheet.create({
   },
   cancelledStatusText: { fontSize: 15, color: "#e74c3c", fontWeight: "600", textAlign: "center" },
   cancelReasonText: { fontSize: 13, color: "#c0392b", marginTop: 6, fontStyle: "italic", textAlign: "center" },
-
-  // Thông tin nhận hàng
   orderInfo: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   infoTitle: { fontSize: 16, fontWeight: "bold", color: "#333", marginBottom: 10 },
   infoItem: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   infoLabel: { fontSize: 14, color: "#666" },
   infoValue: { fontSize: 14, color: "#333", textAlign: "right" },
   addressValue: { flexShrink: 1, flexWrap: "wrap", maxWidth: "70%", textAlign: "right" },
-
-  // Sản phẩm
   productSection: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   sectionTitle: { fontSize: 16, fontWeight: "bold", color: "#333", marginBottom: 10 },
   productItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
@@ -437,14 +448,10 @@ const styles = StyleSheet.create({
   productPrice: { fontSize: 14, color: "#e67e22", fontWeight: "bold", marginTop: 2 },
   productTotal: { fontSize: 14, color: "#e67e22", fontWeight: "bold", marginLeft: 10, minWidth: 80, textAlign: "right" },
   separator: { height: 1, backgroundColor: "#eee" },
-
-  // Thanh toán
   paymentSection: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   paymentItem: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   paymentLabel: { fontSize: 14, color: "#666" },
   paymentValue: { fontSize: 14, color: "#333" },
-
-  // Nút cố định
   fixedButtonContainer: {
     position: "absolute",
     bottom: 20,
@@ -471,43 +478,31 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     alignItems: "center",
   },
-  reviewButton: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#2e7d32",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-    alignItems: "center",
-  },
   buyAgainButton: {
     backgroundColor: "#2e7d32",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
     flex: 1,
-    marginLeft: 8,
     alignItems: "center",
   },
   buttonText: { color: "#fff", fontSize: 14, fontWeight: "bold" },
-  reviewedFixedButton: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#27ae60",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    flex: 1,
-    marginRight: 8,
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "center",
-  },
-  reviewedFixedText: { color: "#27ae60", fontSize: 14, fontWeight: "bold", marginLeft: 6 },
-  buyAgainButtonNormal: { marginLeft: 8, flex: 1 },
-  buyAgainButtonReviewed: { marginLeft: 0, flex: 1 },
+  noteContainer: {
+  marginBottom: 12,
+},
+noteBox: {
+  marginTop: 8,
+  padding: 12,
+  backgroundColor: "#f8f9fa",
+  borderRadius: 10,
+  borderWidth: 1,
+  borderColor: "#e0e0e0",
+},
+noteText: {
+  fontSize: 14,
+  color: "#333",
+  lineHeight: 20,
+},
 });
 
-export default OrderDetailScreen;
+export default PreOrderDetailScreen;

@@ -31,6 +31,16 @@ const EditProductScreen = ({ route, navigation }) => {
   const [growingRegion, setGrowingRegion] = useState(product.growingRegion || "");
   const [image, setImage] = useState(product.imageUrl || null);
   const [loading, setLoading] = useState(false);
+  const [imageUri, setImageUri] = useState(null);
+  const [imageBase64, setImageBase64] = useState(null);
+
+  useEffect(() => {
+    const oldImage = product.imageBase64 || product.imageUrl || null;
+    setImageUri(oldImage);
+    if (product.imageBase64) {
+      setImageBase64(product.imageBase64);
+    }
+  }, [product]);
   // Modal
   const [isSeasonModalVisible, setSeasonModalVisible] = useState(false);
   const [isUnitModalVisible, setUnitModalVisible] = useState(false);
@@ -116,11 +126,20 @@ const EditProductScreen = ({ route, navigation }) => {
     setRegion(addr);
   };
 
-  const pickImage = async () => {
-    const result = await launchImageLibrary({ mediaType: "photo", quality: 0.8 });
-    if (!result.didCancel && result.assets?.[0]?.uri) {
-      setImage(result.assets[0].uri);
-    }
+  const pickImage = () => {
+    launchImageLibrary(
+      { mediaType: "photo", quality: 0.7, includeBase64: true },
+      (response) => {
+        if (response.didCancel || response.errorCode) return;
+        if (response.assets?.[0]) {
+          const asset = response.assets[0];
+          setImageUri(asset.uri);
+          if (asset.base64) {
+            setImageBase64(`data:${asset.type || "image/jpeg"};base64,${asset.base64}`);
+          }
+        }
+      }
+    );
   };
 
   const handleUpdateProduct = async () => {
@@ -151,6 +170,7 @@ const EditProductScreen = ({ route, navigation }) => {
         quantity: qtyNum,
         stock: qtyNum,
         unit,
+        imageBase64: imageBase64 || "",
         imageUrl: image,
         season,
         region,
@@ -176,23 +196,24 @@ const EditProductScreen = ({ route, navigation }) => {
   };
 
   const seasons = ["Xuân", "Hạ", "Thu", "Đông"];
-  const units = ["kg", "bó", "thùng", "tạ", "tấn", "quả", "chục"];
-  const categories = ["Rau củ", "Trái cây", "Hạt giống", "Nông sản khô", "Gia vị", "Hoa", "Cây giống"];
+  const units = ["kg"];
+  const categories = ["Rau củ", "Trái cây", "Hạt giống", "Nông sản khô"];
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Ảnh */}
       <View style={styles.imageSection}>
         <TouchableOpacity onPress={pickImage} style={styles.imageBox}>
-          {image ? (
-            <Image source={{ uri: image }} style={styles.previewImage} />
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.previewImage} resizeMode="cover" />
           ) : (
-            <View style={{ alignItems: "center" }}>
-              <Icon name="image-outline" size={40} color="#aaa" />
-              <Text style={{ marginTop: 8, color: "#888", fontSize: 12 }}>Chỉnh sửa ảnh</Text>
+            <View style={styles.placeholderContainer}>
+              <Icon name="camera-outline" size={50} color="#aaa" />
+              <Text style={styles.placeholderText}>Chọn ảnh mới</Text>
             </View>
           )}
         </TouchableOpacity>
+        <Text style={styles.imageHint}>Nhấn để thay đổi ảnh sản phẩm</Text>
       </View>
 
       <Text style={styles.label}>Tên sản phẩm *</Text>
@@ -359,8 +380,8 @@ const styles = StyleSheet.create({
   selectBox: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   imageSection: { alignItems: "center", marginBottom: 24 },
   imageBox: {
-    width: 120,
-    height: 120,
+    width: "100%",
+    height: 220,
     borderRadius: 16,
     backgroundColor: "#f5f5f5",
     borderWidth: 2,
@@ -368,8 +389,15 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
   },
-  previewImage: { width: 120, height: 120, borderRadius: 16 },
+  previewImage: { width: "100%", height: "100%", borderRadius: 16 },
+  placeholderContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: { marginTop: 12, fontSize: 16, color: "#999" },
+  imageHint: { marginTop: 8, fontSize: 13, color: "#555" },
   button: {
     backgroundColor: "#2e7d32",
     paddingVertical: 16,

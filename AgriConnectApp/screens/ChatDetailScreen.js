@@ -71,7 +71,7 @@ const ChatDetailScreen = ({ route, navigation }) => {
           const data = doc.data();
           setPartner({
             name: data.name || "Nông dân",
-            photoURL: data.photoURL || null,
+            photoURL: data.photoBase64 || data.photoURL || null,
           });
         }
       });
@@ -208,7 +208,11 @@ const ChatDetailScreen = ({ route, navigation }) => {
 
         <View style={styles.headerInfo}>
           {partner.photoURL ? (
-            <Image source={{ uri: partner.photoURL }} style={styles.headerAvatar} />
+            <Image
+              source={{ uri: partner.photoURL || "https://i.pravatar.cc/150" }}
+              style={styles.headerAvatar}
+              defaultSource={{ uri: "https://i.pravatar.cc/150" }}
+            />
           ) : (
             <View style={styles.headerAvatarPlaceholder}>
               <Text style={styles.headerAvatarText}>

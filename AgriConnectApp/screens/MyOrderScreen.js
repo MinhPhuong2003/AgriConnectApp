@@ -208,8 +208,16 @@ const MyOrderScreen = ({ navigation, route }) => {
           <View style={styles.shopInfo}>
             <Text style={styles.shopName}>Thông tin đơn hàng</Text>
             <Text style={styles.orderId}>Mã đơn hàng: {item.id}</Text>
-            
-            {/* Chỉ hiện khi đã giao */}
+            {item.status === "pending" && (
+              <Text style={styles.orderId}>
+                Đặt lúc: {formatDate(item.createdAt)}
+              </Text>
+            )}
+            {item.status === "confirmed" && (
+              <Text style={styles.orderId}>
+                Đã xác nhận lúc: {formatDate(item.updatedAt || item.createdAt)}
+              </Text>
+            )}
             {item.status === "shipping" && (
             <Text style={styles.orderId}>
               Đã giao lúc:{" "}
@@ -432,7 +440,7 @@ const MyOrderScreen = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back-outline" size={26} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.title}>Đơn hàng</Text>
+        <Text style={styles.title}>ĐƠN HÀNG CỦA TÔI</Text>
 
         <TouchableOpacity
           style={styles.cartIconContainer}
@@ -662,7 +670,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buyAgainText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-
   // 2 STYLE MỚI CHO "ĐÃ ĐÁNH GIÁ"
   reviewedBtn: {
     flexDirection: "row",

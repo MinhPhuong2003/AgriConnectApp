@@ -38,6 +38,8 @@ const OrderManagementScreen = ({ navigation, route }) => {
             id: doc.id,
             ...doc.data(),
             createdAt: doc.data().createdAt?.toDate(),
+            updatedAt: doc.data().updatedAt?.toDate(),
+            deliveredAt: doc.data().deliveredAt?.toDate(),
             cancelledAt: doc.data().cancelledAt?.toDate(),
           }));
           setOrders(ordersList);
@@ -78,6 +80,10 @@ const OrderManagementScreen = ({ navigation, route }) => {
 
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
+      const orderRef = firestore().collection("orders").doc(orderId);
+      const orderSnap = await orderRef.get();
+      const orderData = orderSnap.data();
+
       const updates = {
         status: newStatus,
         updatedAt: firestore.FieldValue.serverTimestamp(),
@@ -89,11 +95,22 @@ const OrderManagementScreen = ({ navigation, route }) => {
 
       if (newStatus === "shipping") {
         updates.deliveredAt = firestore.FieldValue.serverTimestamp();
+
+        await firestore().collection("notifications").add({
+          userId: orderData.userId,
+          orderId: orderId,
+          title: `Đơn hàng #${orderId.slice(-8)} đã được giao`,
+          message: "Đơn hàng của bạn đã được giao thành công. Cảm ơn bạn đã mua sắm!",
+          type: "order_delivered",
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          read: false,
+        });
       }
-      await firestore().collection("orders").doc(orderId).update(updates);
+
+      await orderRef.update(updates);
     } catch (error) {
-      console.error("Lỗi cập nhật:", error);
-      Alert.alert("Lỗi", "Không thể cập nhật trạng thái.");
+      console.error("Lỗi cập nhật trạng thái đơn:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật trạng thái đơn hàng.");
     }
   };
 
@@ -124,9 +141,26 @@ const OrderManagementScreen = ({ navigation, route }) => {
               <Text style={styles.productInfoHeader}>Thông tin sản phẩm</Text>
             )}
             <Text style={styles.shopName}>Mã đơn: {item.id}</Text>
-            {!isCancelled && (
-              <Text style={styles.orderId}>Đặt lúc: {formatDate(item.createdAt)}</Text>
-            )}
+            {/* 1. Chờ xác nhận → Hiển thị "Đặt lúc" */}
+              {isPending && (
+                <Text style={styles.orderId}>
+                  Đặt lúc: {formatDate(item.createdAt)}
+                </Text>
+              )}
+
+              {/* 2. Đang vận chuyển → Hiển thị "Đã xác nhận lúc" */}
+              {isConfirmed && item.updatedAt && (
+                <Text style={styles.orderId}>
+                  Đã xác nhận lúc: {formatDate(item.updatedAt)}
+                </Text>
+              )}
+
+              {/* 3. Đã giao → Hiển thị "Đã giao lúc" */}
+              {isShipped && (
+                <Text style={styles.orderId}>
+                  Đã giao lúc: {formatDate(item.deliveredAt || item.updatedAt)}
+                </Text>
+              )}
           </View>
           <Text
             style={[

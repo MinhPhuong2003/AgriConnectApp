@@ -1,9 +1,19 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+} from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 
 const PaymentMethodScreen = ({ navigation, route }) => {
-  const [selectedMethod, setSelectedMethod] = useState(null);
+  const [selectedMethod, setSelectedMethod] = useState(
+    route.params?.selectedPayment || null
+  );
+
   const { onSelectPayment } = route.params || {};
 
   const paymentOptions = [
@@ -24,7 +34,8 @@ const PaymentMethodScreen = ({ navigation, route }) => {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={26} color="#000" />
@@ -32,6 +43,8 @@ const PaymentMethodScreen = ({ navigation, route }) => {
         <Text style={styles.title}>Phương thức thanh toán</Text>
         <View style={{ width: 26 }} />
       </View>
+
+      {/* Danh sách lựa chọn */}
       <ScrollView style={styles.content}>
         {paymentOptions.map((option) => (
           <TouchableOpacity
@@ -41,17 +54,21 @@ const PaymentMethodScreen = ({ navigation, route }) => {
           >
             <View style={styles.optionContent}>
               <View style={styles.radioCircle}>
-                {selectedMethod?.id === option.id && <View style={styles.radioSelected} />}
+                {selectedMethod?.id === option.id && (
+                  <View style={styles.radioSelected} />
+                )}
               </View>
               <Text style={styles.optionName}>{option.name}</Text>
             </View>
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {/* Nút Đồng ý */}
       <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
         <Text style={styles.confirmButtonText}>Đồng ý</Text>
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -64,13 +81,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 14,
-    paddingTop: 50,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    paddingTop: 40,
   },
   title: { fontSize: 18, fontWeight: "bold", color: "#000" },
-  content: { padding: 16, flex: 1 },
+  content: { padding: 16 },
   option: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     backgroundColor: "#fff",
     padding: 16,
     marginBottom: 8,

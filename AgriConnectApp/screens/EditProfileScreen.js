@@ -46,6 +46,7 @@ const EditProfileScreen = ({ navigation }) => {
             phone: data.phone || "",
             address: data.address || "",
             photoURL: data.photoURL || "",
+            photoBase64: data.photoBase64 || null,
             location: data.location || null,
           });
         }
@@ -159,11 +160,28 @@ const EditProfileScreen = ({ navigation }) => {
   };
 
   const handleChoosePhoto = () => {
-    launchImageLibrary({ mediaType: "photo" }, (response) => {
-      if (!response.didCancel && response.assets && response.assets[0].uri) {
-        setUserData((prev) => ({ ...prev, photoURL: response.assets[0].uri }));
+    launchImageLibrary(
+      {
+        mediaType: "photo",
+        quality: 0.8,
+        includeBase64: true,        // BẬT DÒNG NÀY
+      },
+      (response) => {
+        if (response.didCancel || !response.assets?.[0]) return;
+
+        const asset = response.assets[0];
+        const uri = asset.uri;
+        const base64 = asset.base64
+          ? `data:${asset.type || "image/jpeg"};base64,${asset.base64}`
+          : uri;
+
+        setUserData((prev) => ({
+          ...prev,
+          photoURL: uri,         // giữ URI để hiển thị tạm
+          photoBase64: base64,   // lưu base64 thật
+        }));
       }
-    });
+    );
   };
 
   const handleSave = async () => {
@@ -179,6 +197,7 @@ const EditProfileScreen = ({ navigation }) => {
         phone: userData.phone || "",
         address: userData.address || "",
         photoURL: userData.photoURL || "",
+        photoBase64: userData.photoBase64 || null,
         location: userData.location
           ? {
               latitude: userData.location.latitude,
@@ -230,8 +249,11 @@ const EditProfileScreen = ({ navigation }) => {
           <View style={styles.avatarContainer}>
             <TouchableOpacity onPress={handleChoosePhoto}>
               <Image
-                source={{ uri: userData.photoURL || DEFAULT_AVATAR }}
+                source={{
+                  uri: userData.photoBase64 || userData.photoURL || DEFAULT_AVATAR
+                }}
                 style={styles.avatar}
+                onError={() => console.log("Lỗi load avatar edit profile")}
               />
               <View style={styles.editIcon}>
                 <Icon name="camera-outline" size={18} color="#fff" />

@@ -47,7 +47,7 @@ const ChatScreen = ({ navigation }) => {
             if (userSnap.exists) {
               const u = userSnap.data();
               partnerName = u.name || "Người dùng";
-              partnerAvatar = u.photoURL || null;
+              partnerAvatar = u.photoBase64 || u.photoURL || null;
             }
           } catch (e) {}
 
@@ -98,7 +98,13 @@ const ChatScreen = ({ navigation }) => {
       }
     >
       {item.partnerAvatar ? (
-        <Image source={{ uri: item.partnerAvatar }} style={styles.avatar} />
+        <Image
+          source={{
+            uri: item.partnerAvatar || "https://i.pravatar.cc/150"
+          }}
+          style={styles.avatar}
+          defaultSource={{ uri: "https://i.pravatar.cc/150" }}
+        />
       ) : (
         <View style={styles.avatarPlaceholder}>
           <Text style={styles.avatarText}>{item.partnerName.charAt(0).toUpperCase()}</Text>
@@ -144,7 +150,7 @@ const ChatScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={28} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Tin nhắn</Text>
+        <Text style={styles.headerTitle}>TIN NHẮN</Text>
         <View style={{ width: 28 }} />
       </View>
 
@@ -180,8 +186,8 @@ export default ChatScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { backgroundColor: "#27ae60", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 40, paddingBottom: 16 },
-  headerTitle: { color: "#fff", fontSize: 20, fontWeight: "bold" },
+  header: { backgroundColor: "#2e7d32", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingTop: 40, paddingBottom: 16 },
+  headerTitle: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   searchBar: { flexDirection: "row", alignItems: "center", backgroundColor: "#f0f2f5", marginHorizontal: 16, marginVertical: 10, borderRadius: 10, paddingHorizontal: 12, height: 42 },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 16, color: "#000" },
   chatItem: { flexDirection: "row", paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 0.5, borderBottomColor: "#eee" },

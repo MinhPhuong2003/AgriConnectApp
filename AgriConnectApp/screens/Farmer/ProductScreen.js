@@ -79,7 +79,8 @@ const ProductScreen = ({ navigation }) => {
         <Image
           source={{
             uri:
-              item.imageUrl ||
+              item.imageBase64 ||                    // Ưu tiên base64 (từ AddProduct mới)
+              item.imageUrl ||                       // Cũ vẫn hỗ trợ
               "https://cdn-icons-png.flaticon.com/512/415/415733.png",
           }}
           style={styles.image}
@@ -122,10 +123,7 @@ const ProductScreen = ({ navigation }) => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Nông sản của tôi</Text>
-        <TouchableOpacity onPress={() => navigation.replace("HomeFarmer")}>
-          <Icon name="refresh" size={26} color="#fff" />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>NÔNG SẢN CỦA TÔI</Text>
       </View>
 
       {/* Danh sách sản phẩm */}
@@ -173,18 +171,16 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: "#2e7d32",
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 18,
-    paddingTop: 50,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
+    paddingTop: 40,
     elevation: 6,
   },
   headerTitle: {
     color: "#fff",
-    fontSize: 21,
+    fontSize: 18,
     fontWeight: "bold",
   },
   card: {

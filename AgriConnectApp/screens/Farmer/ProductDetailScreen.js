@@ -139,7 +139,7 @@ const ProductDetailScreen = ({ route, navigation }) => {
             const d = u.data();
             userMap[u.id] = {
               name: d.name || d.displayName || "Khách hàng",
-              avatar: d.photoURL || d.avatarUrl,
+              avatar: d.photoBase64 || d.photoURL || d.avatarUrl || PLACEHOLDER,
             };
           });
         }
@@ -270,7 +270,12 @@ const ProductDetailScreen = ({ route, navigation }) => {
   const ListHeader = () => (
     <>
       <View style={styles.imageContainer}>
-        <Image source={{ uri: product?.imageUrl || PLACEHOLDER }} style={styles.productImage} />
+        <Image 
+          source={{ 
+            uri: product?.imageBase64 || product?.imageUrl || PLACEHOLDER
+          }} 
+          style={styles.productImage} 
+        />
       </View>
 
       <View style={styles.priceSection}>
@@ -330,7 +335,12 @@ const ProductDetailScreen = ({ route, navigation }) => {
         }}
       >
         <View style={styles.resultImgWrap}>
-          <Image source={{ uri: item.imageUrl || PLACEHOLDER }} style={styles.resultImg} />
+          <Image 
+            source={{ 
+              uri: item.imageBase64 || item.imageUrl || PLACEHOLDER
+            }} 
+            style={styles.resultImg} 
+          />
         </View>
         <Text style={styles.resultName} numberOfLines={2}>{item.name}</Text>
         <View style={styles.resultPriceRow}>
@@ -470,18 +480,16 @@ const ProductDetailScreen = ({ route, navigation }) => {
 
 export default ProductDetailScreen;
 
-// Styles giữ nguyên 99%, chỉ thêm 1 cái nhỏ
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   header: { backgroundColor: "#2ecc71", paddingTop: 40, paddingHorizontal: 16, paddingBottom: 12 },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   backButtonContainer: { padding: 4 },
-  searchBox: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 40, paddingHorizontal: 16, paddingVertical: 12, elevation: 4 },
+  searchBox: { flex: 1, flexDirection: "row", alignItems: "center", backgroundColor: "#fff", borderRadius: 40, paddingHorizontal: 16, paddingVertical: 4, elevation: 4 },
   searchInput: { flex: 1, fontSize: 16, color: "#333", marginLeft: 8 },
   cartIconContainer: { padding: 8, position: "relative" },
   cartBadge: { position: "absolute", right: 4, top: 4, backgroundColor: "red", borderRadius: 9, minWidth: 18, height: 18, justifyContent: "center", alignItems: "center" },
   badgeText: { color: "#fff", fontSize: 11, fontWeight: "bold" },
-
   imageContainer: { height: 300 },
   productImage: { width: "100%", height: "100%" },
   priceSection: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, marginTop: 12, gap: 10 },
@@ -493,14 +501,12 @@ const styles = StyleSheet.create({
   descriptionContainer: { paddingHorizontal: 16, marginTop: 12, backgroundColor: "#f9f9f9", padding: 12, borderRadius: 12 },
   descriptionTitle: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
   descriptionText: { fontSize: 14, color: "#444", lineHeight: 22 },
-
   ratingSection: { paddingHorizontal: 16, marginTop: 8 },
   ratingRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   avgRating: { fontSize: 16, fontWeight: "600" },
   reviewCount: { fontSize: 14, color: "#777" },
   reviewsTitleContainer: { paddingHorizontal: 16, marginTop: 20, marginBottom: 12 },
   reviewsTitle: { fontSize: 16, fontWeight: "bold" },
-
   reviewItem: { backgroundColor: "#f9f9f9", padding: 12, borderRadius: 12, marginBottom: 12, marginHorizontal: 16 },
   reviewHeader: { flexDirection: "row", gap: 10, marginBottom: 8 },
   avatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#ddd" },
@@ -509,7 +515,6 @@ const styles = StyleSheet.create({
   reviewComment: { fontSize: 14, color: "#555", lineHeight: 20, marginBottom: 8 },
   reviewImage: { width: 80, height: 80, borderRadius: 8 },
   reviewDate: { fontSize: 12, color: "#999" },
-
   resultCard: { backgroundColor: "#fff", borderRadius: 16, padding: 12, elevation: 3, width: "48%", marginBottom: 12 },
   resultImgWrap: { width: "100%", height: 100, borderRadius: 12, overflow: "hidden", backgroundColor: "#f0f0f0" },
   resultImg: { width: "100%", height: "100%" },
@@ -517,7 +522,6 @@ const styles = StyleSheet.create({
   resultPriceRow: { flexDirection: "row", alignItems: "center", marginTop: 4, gap: 6 },
   resultDiscPrice: { fontSize: 15, fontWeight: "bold", color: "#e67e22" },
   resultOrigPrice: { fontSize: 13, color: "#999", textDecorationLine: "line-through" },
-
   bottomBar: { marginBottom: 5, position: "absolute", bottom: 0, left: 0, right: 0, height: 70, flexDirection: "row", backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#eee", paddingHorizontal: 12, paddingVertical: 10, alignItems: "center" },
   shopBtn: { flex: 1, alignItems: "center", gap: 4 },
   shopText: { fontSize: 11, color: "#666" },
@@ -527,7 +531,6 @@ const styles = StyleSheet.create({
   addToCartText: { color: "#2ecc71", fontWeight: "bold", fontSize: 15 },
   buyNowBtn: { marginLeft: 4, flex: 2.3, height: 48, backgroundColor: "#2ecc71", borderRadius: 12, justifyContent: "center", alignItems: "center" },
   buyNowText: { color: "#fff", fontWeight: "bold", fontSize: 15 },
-
   emptyBox: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { marginTop: 16, fontSize: 16, color: "#999" },
 });

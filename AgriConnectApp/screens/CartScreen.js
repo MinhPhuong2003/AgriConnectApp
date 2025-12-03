@@ -20,11 +20,6 @@ const CartScreen = ({ navigation }) => {
   const [selectedMap, setSelectedMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
 
-  const [suggestions] = useState([
-    { id: "s1", name: "Gạo ST25 thương hạng Via gạo", price: 169000, rating: 4.9, reviews: 215, image: "https://via.placeholder.com/100" },
-    { id: "s2", name: "Trái cây sấy khô thực dưỡng", price: 35000, rating: 4.8, reviews: 315, image: "https://via.placeholder.com/100" },
-  ]);
-
   useEffect(() => {
     const user = auth().currentUser;
     if (!user) {
@@ -137,25 +132,19 @@ const CartScreen = ({ navigation }) => {
     if (!user) return;
     const currentItem = cartItems.find(item => item.id === id);
     if (!currentItem) return;
+
     if (delta === -1 && currentItem.quantity === 1) {
-      const itemName = currentItem.name;
       Alert.alert(
         "Xóa sản phẩm",
-        `Bạn có chắc muốn xóa "${itemName}" ra khỏi giỏ hàng?`,
+        `Bạn có chắc muốn xóa "${currentItem.name}" ra khỏi giỏ hàng?`,
         [
           { text: "Hủy", style: "cancel" },
-          {
-            text: "Xóa",
-            style: "destructive",
-            onPress: async () => {
-              await removeItemCompletely(id);
-            },
-          },
-        ],
-        { cancelable: true }
+          { text: "Xóa", style: "destructive", onPress: () => removeItemCompletely(id) },
+        ]
       );
       return;
     }
+
     const cartRef = firestore().collection("carts").doc(user.uid);
     try {
       await firestore().runTransaction(async (transaction) => {
@@ -175,9 +164,9 @@ const CartScreen = ({ navigation }) => {
       });
     } catch (error) {
       console.error("Lỗi cập nhật số lượng:", error);
-      Alert.alert("Lỗi", "Không thể cập nhật số lượng. Vui lòng thử lại.");
     }
   };
+
   const removeItemCompletely = async (id) => {
     const user = auth().currentUser;
     if (!user) return;
@@ -193,26 +182,21 @@ const CartScreen = ({ navigation }) => {
       });
     } catch (error) {
       console.error("Lỗi xóa sản phẩm:", error);
-      Alert.alert("Lỗi", "Không thể xóa sản phẩm. Vui lòng thử lại.");
     }
-  };  
+  };
 
-  const removeFromCart = async (id, name) => {
-  Alert.alert(
-    "Xóa sản phẩm",
-    `Bạn có chắc muốn xóa "${name}" ra khỏi giỏ hàng?`,
-    [
-      { text: "Hủy", style: "cancel" },
-      {
-        text: "Xóa",
-        style: "destructive",
-        onPress: () => removeItemCompletely(id),
-      },
-    ],
-    { cancelable: true }
-  );
-};
+  const removeFromCart = (id, name) => {
+    Alert.alert(
+      "Xóa sản phẩm",
+      `Bạn có chắc muốn xóa "${name}" ra khỏi giỏ hàng?`,
+      [
+        { text: "Hủy", style: "cancel" },
+        { text: "Xóa", style: "destructive", onPress: () => removeItemCompletely(id) },
+      ]
+    );
+  };
 
+  // Ẩ thanh tab khi vào giỏ hàng
   useEffect(() => {
     navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
     return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
@@ -254,27 +238,6 @@ const CartScreen = ({ navigation }) => {
     </View>
   );
 
-  const renderSuggestion = ({ item }) => (
-    <TouchableOpacity style={styles.suggestionCard}>
-      <Image source={{ uri: item.image }} style={styles.suggestionImage} />
-      <Text style={styles.suggestionName} numberOfLines={2}>{item.name}</Text>
-      <View style={styles.suggestionPriceRow}>
-        {item.discount ? (
-          <>
-            <Text style={styles.suggestionDiscountPrice}>{item.discount.toLocaleString("vi-VN")}đ</Text>
-            <Text style={styles.suggestionOriginalPrice}>{item.price.toLocaleString("vi-VN")}đ</Text>
-          </>
-        ) : (
-          <Text style={styles.suggestionPrice}>{item.price.toLocaleString("vi-VN")}đ</Text>
-        )}
-      </View>
-      <View style={styles.suggestionRatingRow}>
-        <Icon name="star" size={14} color="#ffc107" />
-        <Text style={styles.suggestionRating}>{item.rating} ({item.reviews} đánh giá)</Text>
-      </View>
-    </TouchableOpacity>
-  );
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -285,32 +248,23 @@ const CartScreen = ({ navigation }) => {
         <View style={{ width: 26 }} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }}>
         {loading ? (
           <ActivityIndicator size="large" color="#2e7d32" style={{ marginTop: 50 }} />
         ) : cartItems.length === 0 ? (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center", marginTop: 80 }}>
+          <View style={styles.emptyContainer}>
             <Icon name="cart-outline" size={80} color="#ccc" />
-            <Text style={{ marginTop: 16, fontSize: 16, color: "#999" }}>Giỏ hàng trống</Text>
+            <Text style={styles.emptyText}>Giỏ hàng trống</Text>
           </View>
         ) : (
-          <>
-            <View style={styles.cartList}>
-              <FlatList data={cartItems} keyExtractor={(i) => i.id} renderItem={renderCartItem} scrollEnabled={false} />
-            </View>
-
-            <View style={styles.suggestionSection}>
-              <Text style={styles.suggestionTitle}>Có thể bạn sẽ thích</Text>
-              <FlatList
-                data={suggestions}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(i) => i.id}
-                renderItem={renderSuggestion}
-                contentContainerStyle={{ paddingLeft: 16 }}
-              />
-            </View>
-          </>
+          <View style={styles.cartList}>
+            <FlatList
+              data={cartItems}
+              keyExtractor={(i) => i.id}
+              renderItem={renderCartItem}
+              scrollEnabled={false}
+            />
+          </View>
         )}
       </ScrollView>
 
@@ -340,12 +294,12 @@ const CartScreen = ({ navigation }) => {
             </View>
           </View>
 
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.checkoutBtn}
             onPress={() => {
               const selectedItems = cartItems.filter(i => selectedMap.get(i.id));
               if (selectedItems.length === 0) {
-                alert("Vui lòng chọn ít nhất 1 sản phẩm!");
+                Alert.alert("Thông báo", "Vui lòng chọn ít nhất 1 sản phẩm!");
                 return;
               }
               navigation.navigate('Checkout', { 
@@ -366,7 +320,15 @@ export default CartScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { backgroundColor: "#2e7d32", flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 14, paddingTop: 40 },
+  header: { 
+    backgroundColor: "#2e7d32", 
+    flexDirection: "row", 
+    alignItems: "center", 
+    justifyContent: "space-between", 
+    paddingHorizontal: 16, 
+    paddingVertical: 14, 
+    paddingTop: 40 
+  },
   title: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   cartList: { paddingHorizontal: 16, marginTop: 12 },
   cartItem: { 
@@ -377,7 +339,6 @@ const styles = StyleSheet.create({
     borderRadius: 12, 
     marginBottom: 12, 
     elevation: 2,
-    justifyContent: "space-between"
   },
   checkbox: { marginRight: 12 },
   itemImage: { width: 60, height: 60, borderRadius: 8, backgroundColor: "#f0f0f0" },
@@ -395,36 +356,32 @@ const styles = StyleSheet.create({
   },
   qtyBtn: { width: 28, height: 28, justifyContent: "center", alignItems: "center", backgroundColor: "#f9f9f9" },
   qtyText: { width: 32, textAlign: "center", fontSize: 14, fontWeight: "600" },
-  deleteBtn: {
-    padding: 8,
-    justifyContent: "center",
-    alignItems: "center",
+  deleteBtn: { padding: 8 },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", marginTop: 80 },
+  emptyText: { marginTop: 16, fontSize: 16, color: "#999" },
+  fixedBottomBar: { 
+    position: "absolute", 
+    bottom: 0, 
+    left: 0, 
+    right: 0, 
+    backgroundColor: "#fff", 
+    borderTopWidth: 1, 
+    borderTopColor: "#eee", 
+    elevation: 10 
   },
-  fixedBottomBar: { position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#fff", borderTopWidth: 1, borderTopColor: "#eee", elevation: 10 },
   selectAllRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 12 },
   selectAllCheckbox: { marginRight: 8 },
   selectAllText: { fontSize: 15, color: "#333" },
+  totalContainer: { alignItems: "flex-end" },
   totalPriceText: { fontSize: 16, fontWeight: "bold", color: "#e67e22" },
-  checkoutBtn: { marginBottom: 20, marginHorizontal: 16, marginVertical: 12, backgroundColor: "#e74c3c", paddingVertical: 14, borderRadius: 12, alignItems: "center" },
+  totalCountText: { fontSize: 14, color: "#2e7d32", fontWeight: "600", marginTop: 2 },
+  checkoutBtn: { 
+    marginHorizontal: 16, 
+    marginVertical: 12, 
+    backgroundColor: "#e74c3c", 
+    paddingVertical: 14, 
+    borderRadius: 12, 
+    alignItems: "center" 
+  },
   checkoutText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
-  suggestionSection: { marginTop: 20, paddingBottom: 20 },
-  suggestionTitle: { fontSize: 16, fontWeight: "bold", paddingHorizontal: 16, marginBottom: 12 },
-  suggestionCard: { width: 140, backgroundColor: "#fff", borderRadius: 12, padding: 10, marginRight: 12, elevation: 2 },
-  suggestionImage: { width: "100%", height: 90, borderRadius: 8, backgroundColor: "#f0f0f0", marginBottom: 8 },
-  suggestionName: { fontSize: 13, color: "#333", height: 36, marginBottom: 4 },
-  suggestionPriceRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  suggestionDiscountPrice: { fontSize: 14, fontWeight: "bold", color: "#e67e22" },
-  suggestionOriginalPrice: { fontSize: 12, color: "#999", textDecorationLine: "line-through" },
-  suggestionPrice: { fontSize: 14, fontWeight: "bold", color: "#e67e22" },
-  suggestionRatingRow: { flexDirection: "row", alignItems: "center", marginTop: 6, gap: 4 },
-  suggestionRating: { fontSize: 12, color: "#666" },
-  totalContainer: {
-    alignItems: "flex-end",
-  },
-  totalCountText: {
-    fontSize: 14,
-    color: "#2e7d32",
-    fontWeight: "600",
-    marginTop: 2,
-  },
 });

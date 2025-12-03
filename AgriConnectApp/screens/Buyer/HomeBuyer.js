@@ -401,7 +401,7 @@ const HomeBuyer = ({ route, navigation }) => {
     const discount = item.discount || 0;
     const originalPrice = item.price || 0;
     const discountedPrice = originalPrice * (1 - discount / 100);
-
+    const productImageUri = item.imageBase64 || item.imageUrl || PLACEHOLDER;
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -410,7 +410,7 @@ const HomeBuyer = ({ route, navigation }) => {
         <View style={{ flex: 1, justifyContent: "space-between" }}>
           <View style={styles.imageWrapper}>
             <Image
-              source={{ uri: item.imageUrl || PLACEHOLDER }}
+              source={{ uri: productImageUri }}
               style={styles.productImage}
               resizeMode="cover"
             />
@@ -758,7 +758,11 @@ const HomeBuyer = ({ route, navigation }) => {
             {currentPreorderProduct && (
               <View style={styles.successProductInfo}>
                 <Image
-                  source={{ uri: currentPreorderProduct.imageUrl || PLACEHOLDER }}
+                  source={{ 
+                    uri: currentPreorderProduct.imageBase64 || 
+                        currentPreorderProduct.imageUrl || 
+                        PLACEHOLDER 
+                  }}
                   style={styles.successProductImage}
                 />
                 <View style={styles.successProductDetails}>
@@ -809,7 +813,7 @@ export default HomeBuyer;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  header: { backgroundColor: "#2ecc71", paddingTop: 40, paddingHorizontal: 16, paddingBottom: 12 },
+  header: { backgroundColor: "#27ae60", paddingTop: 40, paddingHorizontal: 16, paddingBottom: 12 },
   searchRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   backButtonContainer: { padding: 4, marginRight: 2, justifyContent: "center", alignItems: "center" },
   searchBox: {

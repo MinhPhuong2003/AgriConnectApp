@@ -96,7 +96,7 @@ const CheckoutScreen = ({ navigation, route }) => {
   // === XỬ LÝ PHƯƠNG THỨC THANH TOÁN ===
   const handlePaymentMethodPress = () => {
     navigation.navigate("PaymentMethod", {
-      paymentMethod,
+      selectedPayment: paymentMethod,
       onSelectPayment: (method) => setPaymentMethod(method),
     });
   };
@@ -155,6 +155,7 @@ const CheckoutScreen = ({ navigation, route }) => {
         },
         status: "pending",
         createdAt: firestore.FieldValue.serverTimestamp(),
+        updatedAt: firestore.FieldValue.serverTimestamp(),
         reviewed: false,
       };
       // 1. Tạo đơn hàng

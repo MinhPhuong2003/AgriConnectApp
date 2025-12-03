@@ -3,6 +3,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import Icon from "react-native-vector-icons/Ionicons";
 import HomeFarmer from "../screens/Farmer/HomeFarmer";
 import ChatScreen from "../screens/ChatScreen";
+import PreOrderScreen from "../screens/Farmer/PreOrderScreen";
 import ProductScreen from "../screens/Farmer/ProductScreen";
 import FarmerProfileScreen from "../screens/Farmer/FarmerProfileScreen";
 
@@ -23,6 +24,9 @@ const HomeFarmerTabs = () => {
               break;
             case "MyProducts":
               iconName = "leaf-outline";
+              break;
+            case "PreOrder":
+              iconName = "calendar-outline";
               break;
             case "Chat":
               iconName = "chatbubble-ellipses-outline";
@@ -47,6 +51,13 @@ const HomeFarmerTabs = () => {
         name="MyProducts"
         component={ProductScreen}
         options={{ title: "Sản phẩm" }}
+      />
+
+      {/* Đặt trước */}
+      <Tab.Screen
+        name="PreOrder"
+        component={PreOrderScreen}
+        options={{ title: "Đặt trước" }}
       />
 
       {/* Chat với người mua */}

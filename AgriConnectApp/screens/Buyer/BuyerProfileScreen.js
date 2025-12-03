@@ -91,21 +91,38 @@ const BuyerProfileScreen = ({ navigation }) => {
     const result = await launchImageLibrary({
       mediaType: "photo",
       quality: 0.8,
+      includeBase64: true, // Quan trọng: bật để lấy base64
     });
 
-    if (result.didCancel) return;
-    const imageUri = result.assets?.[0]?.uri;
-    if (!imageUri) return;
+    if (result.didCancel || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const imageUri = asset.uri;
+    const imageBase64 = asset.base64
+      ? `data:${asset.type || "image/jpeg"};base64,${asset.base64}`
+      : imageUri;
 
     try {
       setUpdating(true);
       const uid = auth().currentUser.uid;
-      await firestore().collection("users").doc(uid).update({
+
+      await firestore()
+        .collection("users")
+        .doc(uid)
+        .update({
+          photoURL: imageUri,         // giữ lại URI để dùng khi cần
+          photoBase64: imageBase64,   // lưu base64 để hiển thị nhanh và offline
+        });
+
+      // Cập nhật ngay state để UI phản ánh tức thì
+      setUserData((prev) => ({
+        ...prev,
         photoURL: imageUri,
-      });
+        photoBase64: imageBase64,
+      }));
     } catch (error) {
-      console.error("Lỗi cập nhật ảnh:", error);
-      Alert.alert("Lỗi", "Không thể cập nhật ảnh đại diện.");
+      console.error("Lỗi cập nhật ảnh đại diện:", error);
+      Alert.alert("Lỗi", "Cập nhật thất bại", "Không thể thay đổi ảnh đại diện.");
     } finally {
       setUpdating(false);
     }
@@ -155,8 +172,11 @@ const BuyerProfileScreen = ({ navigation }) => {
       <View style={styles.avatarContainer}>
         <TouchableOpacity onPress={handleChangeAvatar} disabled={updating}>
           <Image
-            source={{ uri: userData.photoURL || DEFAULT_AVATAR }}
+            source={{ 
+              uri: userData.photoBase64 || userData.photoURL || DEFAULT_AVATAR 
+            }}
             style={styles.avatar}
+            onError={(e) => console.log("Lỗi tải avatar:", e.nativeEvent.error)} // (tùy chọn)
           />
           <View style={styles.cameraIcon}>
             <Icon name="camera-outline" size={20} color="#fff" />
@@ -247,6 +267,14 @@ const BuyerProfileScreen = ({ navigation }) => {
           <Icon name="cart-outline" size={22} color="#2e7d32" />
           <Text style={styles.actionText}>Đơn hàng của tôi</Text>
         </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={styles.actionBtn}
+          onPress={() => navigation.navigate("MyPreOrder")}
+        >
+          <Icon name="calendar-outline" size={22} color="#2e7d32" />
+          <Text style={styles.actionText}>Đơn hàng đặt trước</Text>
+        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.actionBtn}
@@ -282,12 +310,12 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
   header: {
-    backgroundColor: "#2ecc71",
+    backgroundColor: "#27ae60",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingTop: 40,
   },
   title: { color: "#fff", fontSize: 18, fontWeight: "bold" },

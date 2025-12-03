@@ -34,7 +34,6 @@ const FarmerProfileScreen = ({ navigation }) => {
     }
   }, [navigation]);
 
-  // Lấy dữ liệu người dùng
   useEffect(() => {
     if (!uid) return;
     const unsubscribe = firestore()
@@ -57,7 +56,6 @@ const FarmerProfileScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [uid]);
 
-  // Lấy danh sách sản phẩm
   useEffect(() => {
     if (!uid) return;
     const unsubscribe = firestore()
@@ -76,7 +74,6 @@ const FarmerProfileScreen = ({ navigation }) => {
     return () => unsubscribe();
   }, [uid]);
 
-  // Lấy danh sách đơn hàng
   useEffect(() => {
     if (!uid) return;
     const unsubscribe = firestore()
@@ -95,14 +92,27 @@ const FarmerProfileScreen = ({ navigation }) => {
   }, [uid]);
 
   const handleChangeAvatar = async () => {
-    const result = await launchImageLibrary({ mediaType: "photo", quality: 0.8 });
-    if (result.didCancel) return;
-    const imageUri = result.assets?.[0]?.uri;
-    if (!imageUri) return;
+    const result = await launchImageLibrary({ 
+      mediaType: "photo", 
+      quality: 0.8,
+      includeBase64: true
+    });
+
+    if (result.didCancel || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    const imageUri = asset.uri;
+    const imageBase64 = asset.base64 ? `data:${asset.type};base64,${asset.base64}` : imageUri;
 
     try {
       setUpdating(true);
-      await firestore().collection("users").doc(uid).update({ photoURL: imageUri });
+      await firestore()
+        .collection("users")
+        .doc(uid)
+        .update({
+          photoURL: imageUri,
+          photoBase64: imageBase64,
+        });
     } catch (error) {
       console.error("Lỗi cập nhật ảnh:", error);
       Alert.alert("Lỗi", "Không thể cập nhật ảnh đại diện.");
@@ -156,7 +166,9 @@ const FarmerProfileScreen = ({ navigation }) => {
       <View style={styles.avatarContainer}>
         <TouchableOpacity onPress={handleChangeAvatar} disabled={updating}>
           <Image
-            source={{ uri: userData.photoURL || DEFAULT_AVATAR }}
+            source={{ 
+              uri: userData.photoBase64 || userData.photoURL || DEFAULT_AVATAR
+            }}
             style={styles.avatar}
             onError={(e) => console.log("Lỗi tải ảnh avatar:", e.nativeEvent.error)}
           />
@@ -220,7 +232,7 @@ const FarmerProfileScreen = ({ navigation }) => {
           style={styles.actionBtn}
           onPress={() => navigation.navigate("PreOrderManagement")}
         >
-          <Icon name="cart-outline" size={22} color="#2e7d32" />
+          <Icon name="calendar-outline" size={22} color="#2e7d32" />
           <Text style={styles.actionText}>Quản lý đơn đặt trước</Text>
         </TouchableOpacity>
 

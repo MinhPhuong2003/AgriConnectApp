@@ -8,186 +8,211 @@ import {
   SectionList,
   RefreshControl,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
+import firestore from "@react-native-firebase/firestore";
+import auth from "@react-native-firebase/auth";
 
 const NotificationsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [generalNotifications, setGeneralNotifications] = useState([]);
+  const [orderUpdates, setOrderUpdates] = useState([]);
 
-  const generalNotifications = [
-    {
-      id: "1",
-      title: "Đơn hàng #123 đã được giao",
-      message: "Đơn hàng của bạn đã được giao thành công. Vui lòng đánh giá!",
-      time: "2 phút trước",
-      read: false,
-      type: "order",
-    },
-    {
-      id: "2",
-      title: "Khuyến mãi mới!",
-      message: "Giảm 20% cho tất cả rau củ hữu cơ từ hôm nay!",
-      time: "1 giờ trước",
-      read: false,
-      type: "promotion",
-    },
-    {
-      id: "3",
-      title: "Sản phẩm bạn quan tâm Pinnacle",
-      message: "Cà chua hữu cơ đã được nhập kho mới.",
-      time: "3 giờ trước",
-      read: true,
-      type: "restock",
-    },
-    {
-      id: "4",
-      title: "Tin nhắn từ người bán",
-      message: "Chào bạn, khoai lang tím đã sẵn sàng giao nhé!",
-      time: "1 ngày trước",
-      read: true,
-      type: "message",
-    },
-  ];
-
-  const orderUpdates = [
-    {
-      id: "o1",
-      title: "Đơn hàng #468647JTP9K0 đã được giao.",
-      message: "Bạn hãy giữ sản phẩm trước ngày 20-07-2024 để được nhận 300 xu và giúp người khác hiểu hơn về sản phẩm nhé!",
-      time: "08:49 17-07-2024",
-    },
-    {
-      id: "o2",
-      title: "Đơn hàng #863647JTP9K0 đã được giao.",
-      message: "Bạn hãy giữ sản phẩm trước ngày 10-07-2024 để được nhận 300 xu và giúp người khác hiểu hơn về sản phẩm nhé!",
-      time: "08:49 17-07-2024",
-    },
-  ];
-
-  const sections = [
-    { title: null, data: generalNotifications },
-    { title: "Cập nhật đơn hàng", data: orderUpdates, showViewAll: true },
-  ];
+  const currentUser = auth().currentUser;
+  if (!currentUser) {
+    return (
+      <View style={styles.loggedOutContainer}>
+        <Icon name="log-in-outline" size={60} color="#ccc" />
+        <Text style={styles.loggedOutText}>Vui lòng đăng nhập để xem thông báo</Text>
+      </View>
+    );
+  }
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 600);
-  }, []);
+    setLoading(true);
+    const unsubGeneral = firestore()
+      .collection("notifications")
+      .where("userId", "==", currentUser.uid)
+      .where("type", "!=", "order_delivered")
+      .orderBy("type")
+      .orderBy("createdAt", "desc")
+      .onSnapshot(
+        (snap) => {
+          if (!snap || snap.empty) {
+            setGeneralNotifications([]);
+            return;
+          }
+          const list = snap.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate(),
+          }));
+          setGeneralNotifications(list);
+        },
+        (err) => console.log("Lỗi thông báo chung:", err)
+      );
+
+    const unsubOrders = firestore()
+      .collection("notifications")
+      .where("userId", "==", currentUser.uid)
+      .where("type", "==", "order_delivered")
+      .orderBy("createdAt", "desc")
+      .onSnapshot(async (snap) => {
+        if (!snap || snap.empty) {
+          setOrderUpdates([]);
+          setLoading(false);
+          return;
+        }
+
+        const updates = [];
+        for (const doc of snap.docs) {
+          const noti = doc.data();
+          let imageUrl = null;
+          try {
+            const orderSnap = await firestore().collection("orders").doc(noti.orderId).get();
+            if (orderSnap.exists) {
+              const items = orderSnap.data()?.items || [];
+              if (items.length > 0) {
+                imageUrl = items[0].imageUrl;
+              }
+            }
+          } catch (e) {
+          }
+
+          updates.push({
+            id: doc.id,
+            orderId: noti.orderId,
+            title: `Đơn hàng ${noti.orderId} đã được giao thành công. Cảm ơn bạn đã mua sắm!`,
+            imageUrl:
+              imageUrl ||
+              "https://via.placeholder.com/80/E8F5E8/27ae60?text=Delivered",
+            time: noti.createdAt?.toDate(),
+          });
+        }
+
+        setOrderUpdates(updates);
+        setLoading(false);
+      }, (err) => {
+        console.log("Lỗi order updates:", err);
+        setOrderUpdates([]);
+        setLoading(false);
+      });
+
+    return () => {
+      unsubGeneral();
+      unsubGeneral();
+      unsubOrders();
+    };
+  }, [currentUser]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+    setTimeout(() => setRefreshing(false), 800);
   };
 
-  const getIcon = (type) => {
-    switch (type) {
-      case "order": return "receipt-outline";
-      case "promotion": return "pricetag-outline";
-      case "restock": return "leaf-outline";
-      case "message": return "chatbubble-outline";
-      default: return "notifications-outline";
-    }
+  const formatTime = (date) => {
+    if (!date) return "Vừa xong";
+    const now = new Date();
+    const diff = now - date;
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "Vừa xong";
+    if (minutes < 60) return `${minutes} phút trước`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} giờ trước`;
+    return date.toLocaleDateString("vi-VN");
   };
 
-  const getColor = (type) => {
-    switch (type) {
-      case "order": return "#e67e22";
-      case "promotion": return "#ff5722";
-      case "restock": return "#4caf50";
-      case "message": return "#2196f3";
-      default: return "#2ecc71";
-    }
-  };
+  const renderGeneralItem = ({ item }) => (
+  <TouchableOpacity
+    style={[styles.notificationCard, !item.read && styles.unreadCard]}
+    onPress={async () => {
+      if (!item.read) {
+        await firestore()
+          .collection("notifications")
+          .doc(item.id)
+          .update({ read: true });
+      }
+    }}
+  >
+    <View style={[styles.iconCircle, { backgroundColor: getColor(item.type) + "20" }]}>
+      <Icon name={getIcon(item.type)} size={24} color={getColor(item.type)} />
+    </View>
+    <View style={styles.content}>
+      <Text style={[styles.title, !item.read && styles.unreadText]}>{item.title}</Text>
+      <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
+      <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
+    </View>
+    {!item.read && <View style={styles.unreadDot} />}
+  </TouchableOpacity>
+);
 
-  const renderGeneralItem = ({ item, index }) => (
-    <TouchableOpacity
-      style={[
-        styles.notificationCard,
-        !item.read && styles.unreadCard,
-        index === 0 && styles.firstNotificationCard,
-      ]}
-    >
-      <View style={[styles.iconCircle, { backgroundColor: getColor(item.type) + "20" }]}>
-        <Icon name={getIcon(item.type)} size={24} color={getColor(item.type)} />
-      </View>
-
-      <View style={styles.content}>
-        <Text style={[styles.title, !item.read && styles.unreadText]}>
-          {item.title}
-        </Text>
-        <Text style={styles.message} numberOfLines={2}>
-          {item.message}
-        </Text>
-        <Text style={styles.time}>{item.time}</Text>
-      </View>
-
-      {!item.read && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  );
-
-  const renderOrderItem = ({ item }) => (
-    <TouchableOpacity style={styles.orderItem}>
-      <View style={styles.orderImagePlaceholder}>
-        <Icon name="cube-outline" size={32} color="#aaa" />
-      </View>
-      <View style={styles.orderContent}>
-        <Text style={styles.orderTitle}>{item.title}</Text>
-        <Text style={styles.orderMessage} numberOfLines={2}>
-          {item.message}
-        </Text>
-        <Text style={styles.orderTime}>{item.time}</Text>
-      </View>
-      <Icon name="chevron-forward" size={20} color="#ddd" />
-    </TouchableOpacity>
-  );
-
-  const renderSectionHeader = ({ section }) => {
-    if (!section.title) return null;
-
-    return (
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{section.title}</Text>
-        {section.showViewAll && (
-          <Text style={styles.viewAllText}>Xem tất cả (5)</Text>
-        )}
-      </View>
-    );
-  };
+const renderOrderItem = ({ item }) => (
+  <TouchableOpacity
+    style={styles.orderItem}
+    onPress={async () => {
+      await firestore()
+        .collection("notifications")
+        .doc(item.id)
+        .update({ read: true });
+      navigation.navigate("OrderDetail", { orderId: item.orderId });
+    }}
+  >
+    <Image source={{ uri: item.imageUrl }} style={styles.orderImage} />
+    <View style={styles.orderContent}>
+      <Text style={styles.orderTitle}>{item.title}</Text>
+      <Text style={styles.orderIdText}>Mã đơn: {item.orderId}</Text>
+      <Text style={styles.orderTime}>{formatTime(item.time)}</Text>
+    </View>
+    <Icon name="chevron-forward" size={22} color="#aaa" />
+  </TouchableOpacity>
+);
+  const sections = [
+    { title: null, data: generalNotifications },
+    { title: "Cập nhật đơn hàng", data: orderUpdates },
+  ];
 
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" color="#2ecc71" />
+        <ActivityIndicator size="large" color="#27ae60" />
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header có nút back */}
       <View style={styles.header}>
-        <View style={{ width: 26 }} />
+        <View style={{ width: 30 }} />
         <Text style={styles.headerTitle}>Thông báo</Text>
-        <View style={{ width: 26 }} />
+        <View style={{ width: 30 }} />
       </View>
 
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, section, index }) => {
-          if (section.title === null) {
-            return renderGeneralItem({ item, index });
-          } else {
-            return renderOrderItem({ item });
-          }
+        renderItem={({ item, section }) => {
+          if (!section.title) return renderGeneralItem({ item });
+          return renderOrderItem({ item });
         }}
-        renderSectionHeader={renderSectionHeader}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#2ecc71"]} />
+        renderSectionHeader={({ section }) =>
+          section.title ? (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+            </View>
+          ) : null
         }
-        contentContainerStyle={{ paddingBottom: 120 }}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={() => <View style={{ height: 12 }} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#27ae60"]} />
+        }
+        contentContainerStyle={{ paddingBottom: 100 }}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Icon name="notifications-off-outline" size={70} color="#ddd" />
+            <Text style={styles.emptyText}>Chưa có thông báo nào</Text>
+          </View>
+        }
       />
     </SafeAreaView>
   );
@@ -197,46 +222,43 @@ export default NotificationsScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8f9fa" },
+  loggedOutContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+  },
+  loggedOutText: { marginTop: 16, fontSize: 16, color: "#999" },
   header: {
-    backgroundColor: "#2ecc71",
+    backgroundColor: "#27ae60",
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
+    justifyContent: "center",
     paddingTop: 40,
-    paddingBottom: 16,
+    paddingBottom: 10,
   },
   headerTitle: { fontSize: 20, fontWeight: "bold", color: "#fff" },
+  center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8f9fa" },
+
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
     backgroundColor: "#f8f9fa",
   },
   sectionTitle: { fontSize: 17, fontWeight: "bold", color: "#333" },
-  viewAllText: { fontSize: 13, color: "#27ae60", fontWeight: "600" },
   notificationCard: {
     flexDirection: "row",
     backgroundColor: "#fff",
+    marginHorizontal: 16,
+    marginVertical: 5,
     padding: 14,
     borderRadius: 12,
-    marginHorizontal: 16,
-    marginBottom: 10,
     elevation: 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    position: "relative",
-  },
-  firstNotificationCard: {
-    marginTop: 4,
   },
   unreadCard: {
     backgroundColor: "#f8fff8",
     borderLeftWidth: 4,
-    borderLeftColor: "#2ecc71",
+    borderLeftColor: "#27ae60",
   },
   iconCircle: {
     width: 48,
@@ -248,8 +270,8 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1 },
   title: { fontSize: 15, fontWeight: "600", color: "#333" },
-  unreadText: { fontWeight: "bold", color: "#2ecc71" },
-  message: { fontSize: 13, color: "#666", marginTop: 4, lineHeight: 18 },
+  unreadText: { fontWeight: "bold", color: "#27ae60" },
+  message: { fontSize: 13.5, color: "#666", marginTop: 4, lineHeight: 19 },
   time: { fontSize: 12, color: "#999", marginTop: 6 },
   unreadDot: {
     width: 10,
@@ -264,24 +286,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#fff",
-    padding: 14,
     marginHorizontal: 16,
-    marginBottom: 10,
+    marginVertical: 6,
+    padding: 14,
     borderRadius: 12,
-    elevation: 1,
+    elevation: 2,
   },
-  orderImagePlaceholder: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
+  orderImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    marginRight: 14,
   },
   orderContent: { flex: 1 },
-  orderTitle: { fontSize: 15, fontWeight: "600", color: "#333", marginBottom: 4 },
-  orderMessage: { fontSize: 13.5, color: "#666", lineHeight: 19, marginBottom: 6 },
-  orderTime: { fontSize: 12, color: "#999" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  orderTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#27ae60",
+    marginBottom: 4,
+  },
+  orderIdText: {
+    fontSize: 13,
+    color: "#555",
+    fontWeight: "500",
+  },
+  orderTime: { fontSize: 12, color: "#999", marginTop: 4 },
+  empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 100 },
+  emptyText: { fontSize: 16, color: "#aaa", marginTop: 16 },
 });
