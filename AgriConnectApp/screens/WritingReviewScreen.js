@@ -16,6 +16,16 @@ import Icon from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
 
+const getImageSource = (item) => {
+  if (item?.imageBase64) {
+    return { uri: item.imageBase64 };
+  }
+  if (item?.imageUrl) {
+    return { uri: item.imageUrl };
+  }
+  return { uri: "https://via.placeholder.com/80/eeeeee/999999?text=No+Img" };
+};
+
 const WritingReviewScreen = ({ navigation, route }) => {
   const { orderId } = route.params;
   const [order, setOrder] = useState(null);
@@ -23,7 +33,6 @@ const WritingReviewScreen = ({ navigation, route }) => {
   const [reviews, setReviews] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // Kiểm tra xem đã chọn ít nhất 1 sao chưa → bật nút Gửi
   const canSubmit = reviews.some(farmer =>
     farmer.farmerRating > 0 || farmer.products.some(p => p.rating > 0)
   );
@@ -80,7 +89,8 @@ const WritingReviewScreen = ({ navigation, route }) => {
           let productReview = {
             productId: item.id,
             name: item.name || "Sản phẩm",
-            imageUrl: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
+            imageBase64: item.imageBase64 || null,
+            imageUrl: item.imageUrl || null,
             rating: 0,
             comment: "",
             isReviewed: false,
@@ -103,14 +113,15 @@ const WritingReviewScreen = ({ navigation, route }) => {
 
         const sellerPromises = Array.from(sellerIds).map(async (sid) => {
           if (sid === "unknown" || !sid) return;
-          const userDoc = await firestore().collection("users").doc(sid).get();
-          if (userDoc.exists) {
-            const data = userDoc.data();
-            groupedByFarmer[sid].farmerName = data.name || data.displayName || "Nông dân";
-            groupedByFarmer[sid].farmerAvatarUrl = data.photoURL || data.avatarUrl || null;
-          } else {
+          try {
+            const userDoc = await firestore().collection("users").doc(sid).get();
+            if (userDoc.exists) {
+              const data = userDoc.data();
+              groupedByFarmer[sid].farmerName = data.name || data.displayName || "Nông dân";
+              groupedByFarmer[sid].farmerAvatarUrl = data.photoURL || data.avatarUrl || null;
+            }
+          } catch (e) {
             groupedByFarmer[sid].farmerName = "Nông dân";
-            groupedByFarmer[sid].farmerAvatarUrl = null;
           }
         });
 
@@ -200,10 +211,12 @@ const WritingReviewScreen = ({ navigation, route }) => {
         const reviewRef = firestore()
           .collection("reviews")
           .doc(review.isReviewed ? `${orderId}_${review.productId}_${user.uid}` : undefined);
+
         batch.set(reviewRef, {
           userId: user.uid,
-          orderId: orderId,
+          orderId,
           productId: review.productId,
+          sellerId: review.sellerId,
           rating: review.rating,
           farmerRating: review.farmerRating,
           comment: review.comment,
@@ -213,16 +226,13 @@ const WritingReviewScreen = ({ navigation, route }) => {
         if (review.sellerId && review.sellerId !== "unknown") {
           const farmerRef = firestore().collection("users").doc(review.sellerId);
           const totalPoints = review.rating + review.farmerRating;
-          batch.set(
-            farmerRef,
-            { totalPoints: firestore.FieldValue.increment(totalPoints) },
-            { merge: true }
-          );
+          batch.set(farmerRef, { totalPoints: firestore.FieldValue.increment(totalPoints) }, { merge: true });
         }
       });
 
       const orderRef = firestore().collection("orders").doc(orderId);
       batch.update(orderRef, { reviewed: true });
+
       await batch.commit();
 
       Alert.alert("Thành công", "Đánh giá của bạn đã được gửi!", [
@@ -277,7 +287,6 @@ const WritingReviewScreen = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      {/* Header chỉ còn nút back */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={26} color="#FF5722" />
@@ -286,7 +295,6 @@ const WritingReviewScreen = ({ navigation, route }) => {
         <View style={{ width: 26 }} />
       </View>
 
-      {/* Nội dung đánh giá */}
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -299,16 +307,13 @@ const WritingReviewScreen = ({ navigation, route }) => {
             <View key={farmer.sellerId} style={styles.farmerGroup}>
               <View style={styles.farmerCard}>
                 <Image
-                  source={{
-                    uri: farmer.farmerAvatarUrl || "https://via.placeholder.com/40/f0f0f0/cccccc?text=A",
-                  }}
+                  source={getImageSource({ imageBase64: farmer.farmerAvatarUrl })}
                   style={styles.farmerAvatar}
                   resizeMode="cover"
                 />
                 <Text style={styles.farmerName}>{farmer.farmerName}</Text>
               </View>
 
-              {/* Đánh giá nông dân */}
               <View style={styles.ratingSection}>
                 <Text style={styles.sectionTitle}>Đánh giá nông dân</Text>
                 {renderStarRating(
@@ -324,7 +329,7 @@ const WritingReviewScreen = ({ navigation, route }) => {
                 <View key={product.productId} style={styles.productItem}>
                   <View style={styles.productCard}>
                     <Image
-                      source={{ uri: product.imageUrl }}
+                      source={getImageSource(product)}
                       style={styles.productImage}
                       resizeMode="cover"
                     />
@@ -368,7 +373,6 @@ const WritingReviewScreen = ({ navigation, route }) => {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* NÚT GỬI CỐ ĐỊNH Ở DƯỚI */}
       <View style={styles.fixedBottomButton}>
         <TouchableOpacity
           style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
@@ -378,9 +382,7 @@ const WritingReviewScreen = ({ navigation, route }) => {
           {submitting ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.submitButtonText}>
-              Gửi đánh giá
-            </Text>
+            <Text style={styles.submitButtonText}>Gửi đánh giá</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -405,18 +407,11 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
   },
   title: { fontSize: 18, fontWeight: "bold", color: "#FF5722" },
-
   scrollContent: { padding: 16, paddingBottom: 100 },
-
   farmerGroup: { marginBottom: 28 },
-  farmerCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
+  farmerCard: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   farmerAvatar: { width: 48, height: 48, borderRadius: 24, marginRight: 12 },
   farmerName: { fontSize: 17, fontWeight: "600", color: "#212121" },
-
   productItem: { marginBottom: 24 },
   productCard: {
     flexDirection: "row",
@@ -430,12 +425,10 @@ const styles = StyleSheet.create({
   productImage: { width: 70, height: 70, borderRadius: 10, marginRight: 14 },
   productInfo: { flex: 1, justifyContent: "center" },
   productName: { fontSize: 15.5, color: "#212121", fontWeight: "500", lineHeight: 22 },
-
   ratingSection: { marginVertical: 8 },
   sectionTitle: { fontSize: 15.5, color: "#424242", fontWeight: "600", marginBottom: 12 },
   starContainer: { flexDirection: "row", alignItems: "center" },
   ratingText: { marginLeft: 12, fontSize: 16, color: "#FF8F00", fontWeight: "600" },
-
   reviewSection: { marginTop: 10 },
   reviewInput: {
     borderWidth: 1.5,
@@ -447,10 +440,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     textAlignVertical: "top",
   },
-
   farmerSeparator: { height: 1.5, backgroundColor: "#e0e0e0", marginVertical: 20 },
-
-  // NÚT GỬI CỐ ĐỊNH
   fixedBottomButton: {
     position: "absolute",
     bottom: 0,
@@ -462,7 +452,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderTopWidth: 1,
     borderTopColor: "#eee",
-    marginBottom: 10,
   },
   submitButton: {
     backgroundColor: "#FF5722",
@@ -471,12 +460,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  submitButtonDisabled: {
-    backgroundColor: "#ccc",
-  },
-  submitButtonText: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "600",
-  },
+  submitButtonDisabled: { backgroundColor: "#ccc" },
+  submitButtonText: { color: "#fff", fontSize: 17, fontWeight: "600" },
 });

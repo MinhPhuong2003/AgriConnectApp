@@ -29,37 +29,31 @@ const HomeFarmer = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [farmerData, setFarmerData] = useState(null);
   const [products, setProducts] = useState([]);
-
   const [todayOrders, setTodayOrders] = useState(0);
   const [totalSold, setTotalSold] = useState(0);
   const [averageRating, setAverageRating] = useState(0);
-
   const [tipIndex, setTipIndex] = useState(0);
   const intervalRef = useRef(null);
-
   const uid = auth().currentUser?.uid;
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
   
   useEffect(() => {
     if (!uid) return;
-
     const unsub = firestore()
       .collection("chats")
       .where("participants", "array-contains", uid)
       .onSnapshot((snapshot) => {
         let totalUnread = 0;
-
         snapshot.forEach((doc) => {
           const data = doc.data();
           const unreadForMe = data.unreadCount?.[uid] || 0;
           totalUnread += unreadForMe;
         });
-
         setUnreadMessagesCount(totalUnread);
       });
-
     return () => unsub();
   }, [uid]);
+  
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       setTipIndex((prev) => (prev + 1) % DAILY_TIPS.length);
@@ -71,7 +65,6 @@ const HomeFarmer = ({ navigation }) => {
   const nextTip = () => {
     clearInterval(intervalRef.current);
     setTipIndex((prev) => (prev + 1) % DAILY_TIPS.length);
-
     intervalRef.current = setInterval(() => {
       setTipIndex((prev) => (prev + 1) % DAILY_TIPS.length);
     }, 4000);
@@ -104,6 +97,7 @@ const HomeFarmer = ({ navigation }) => {
         const list = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
+          imageBase64: doc.data().imageBase64 || null,
         }));
         setProducts(list);
       });
@@ -112,10 +106,8 @@ const HomeFarmer = ({ navigation }) => {
 
   useEffect(() => {
     if (!uid) return;
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     const unsub = firestore()
       .collection("orders")
       .where("sellerId", "==", uid)
@@ -124,13 +116,10 @@ const HomeFarmer = ({ navigation }) => {
         let soldCount = 0;
         let totalRating = 0;
         let ratingCount = 0;
-
         snapshot.forEach((doc) => {
           const data = doc.data();
           const orderDate = data.createdAt?.toDate();
-
           if (orderDate && orderDate >= today) todayCount++;
-
           if (data.status === "completed" || data.status === "delivered") {
             data.items?.forEach((item) => {
               soldCount += item.quantity || 0;
@@ -141,12 +130,10 @@ const HomeFarmer = ({ navigation }) => {
             }
           }
         });
-
         setTodayOrders(todayCount);
         setTotalSold(soldCount);
         setAverageRating(ratingCount > 0 ? totalRating / ratingCount : 0);
       });
-
     return () => unsub();
   }, [uid]);
 
@@ -185,12 +172,14 @@ const HomeFarmer = ({ navigation }) => {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#27ae60" />
       }
     >
-      {/* Banner chào */}
       <View style={styles.welcomeBanner}>
         <View style={styles.bannerContent}>
           <Image
-            source={{ uri: farmerData?.photoURL || DEFAULT_AVATAR }}
+            source={{ 
+              uri: farmerData?.photoBase64 || farmerData?.photoURL || DEFAULT_AVATAR 
+            }}
             style={styles.bannerAvatar}
+            defaultSource={{ uri: DEFAULT_AVATAR }}
           />
           <View style={styles.bannerInfo}>
             <Text style={styles.greetingText}>Xin chào, {fullName}!</Text>
@@ -200,8 +189,6 @@ const HomeFarmer = ({ navigation }) => {
             style={{ position: "relative" }}
           >
             <Icon name="chatbubbles" size={30} color="#fff" />
-
-            {/* Badge số tin nhắn chưa đọc */}
             {unreadMessagesCount > 0 && (
               <View style={styles.chatBadge}>
                 <Text style={styles.chatBadgeText}>
@@ -307,12 +294,15 @@ const HomeFarmer = ({ navigation }) => {
               <TouchableOpacity
                 key={item.id}
                 style={styles.productCard}
-                onPress={() => navigation.navigate("ProductDetail", { product: item })}
+                onPress={() => navigation.navigate("Product", { product: item })}
               >
                 <Image
-                  source={{ uri: item.imageUrl || "https://via.placeholder.com/150" }}
+                  source={{ 
+                    uri: item.imageBase64 || item.imageUrl || "https://via.placeholder.com/150" 
+                  }}
                   style={styles.productImage}
                   resizeMode="cover"
+                  defaultSource={{ uri: "https://via.placeholder.com/150" }}
                 />
                 <View style={[styles.stockBadge, { backgroundColor: stockInfo.color }]}>
                   <Text style={styles.stockBadgeText}>{stockInfo.text}</Text>
@@ -332,7 +322,6 @@ const HomeFarmer = ({ navigation }) => {
           })}
         </View>
       )}
-
       <View style={{ height: 40 }} />
     </ScrollView>
   );
@@ -344,7 +333,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8fbf8" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8fbf8" },
   loadingText: { marginTop: 12, color: "#666", fontSize: 16 },
-
   welcomeBanner: {
     backgroundColor: "#27ae60",
     marginHorizontal: 20,
@@ -358,19 +346,7 @@ const styles = StyleSheet.create({
   bannerAvatar: { width: 72, height: 72, borderRadius: 36, borderWidth: 4, borderColor: "#fff" },
   bannerInfo: { flex: 1, marginLeft: 16 },
   greetingText: { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  verifiedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.3)",
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginTop: 6,
-  },
-  verifiedText: { color: "#fff", fontSize: 12, marginLeft: 4 },
   subGreeting: { color: "#ecf0f1", fontSize: 16, fontWeight: "500" },
-
   quickActions: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -385,7 +361,6 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   actionText: { color: "#fff", marginTop: 8, fontWeight: "600" },
-
   statsContainer: {
     flexDirection: "row",
     marginHorizontal: 20,
@@ -398,7 +373,6 @@ const styles = StyleSheet.create({
   statBox: { flex: 1, alignItems: "center", justifyContent: "center" },
   statNumber: { fontSize: 22, fontWeight: "bold", color: "#2c3e50", marginTop: 8 },
   statLabel: { fontSize: 13, color: "#7f8c8d", marginTop: 4 },
-
   tipCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -411,7 +385,6 @@ const styles = StyleSheet.create({
   },
   tipTitle: { fontWeight: "bold", color: "#e67e22", fontSize: 15 },
   tipText: { color: "#2c3e50", marginTop: 4, fontSize: 14.5, lineHeight: 20 },
-
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -421,7 +394,6 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 19, fontWeight: "bold", color: "#2c3e50" },
   seeAllText: { color: "#27ae60", fontWeight: "600", fontSize: 15 },
-
   productsGrid: {
     paddingHorizontal: 16,
     flexDirection: "row",
@@ -453,7 +425,6 @@ const styles = StyleSheet.create({
   price: { fontSize: 18, fontWeight: "bold", color: "#e74c3c" },
   unit: { fontSize: 14, color: "#7f8c8d", marginLeft: 4 },
   location: { fontSize: 12, color: "#27ae60", marginTop: 4 },
-
   emptyProducts: { alignItems: "center", paddingVertical: 40 },
   emptyText: { fontSize: 17, color: "#95a5a6", marginTop: 16 },
   addFirstBtn: {
@@ -478,7 +449,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#fff",
   },
-
   chatBadgeText: {
     color: "#fff",
     fontSize: 11,

@@ -52,6 +52,15 @@ const OrderDetailScreen = ({ navigation, route }) => {
     return () => unsubscribe();
   }, [orderId]);
 
+  const getImageSource = (item) => {
+    if (item.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item.imageUrl) {
+      return { uri: item.imageUrl };
+    }
+  };
+
   const handleCancelOrder = () => {
     if (!order) return;
     navigation.navigate("CancelOrder", { order });
@@ -75,7 +84,8 @@ const OrderDetailScreen = ({ navigation, route }) => {
       const newItems = order.items.map((item) => ({
         id: item.id,
         name: item.name || "Sản phẩm",
-        imageUrl: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
+        imageBase64: item.imageBase64 || null,
+        imageUrl: item.imageBase64 ? null : (item.imageUrl || null),
         price: item.price || 0,
         quantity: item.quantity || 1,
         variant: item.variant || null,
@@ -96,6 +106,10 @@ const OrderDetailScreen = ({ navigation, route }) => {
           if (existing) {
             existing.quantity += newItem.quantity;
             existing.selected = true;
+            if (newItem.imageBase64) {
+              existingItems[existingIndex].imageBase64 = newItem.imageBase64;
+              existingItems[existingIndex].imageUrl = null;
+            }
           } else {
             items.push(newItem);
           }
@@ -159,7 +173,6 @@ const OrderDetailScreen = ({ navigation, route }) => {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollContainer}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={26} color="#000" />
@@ -168,7 +181,6 @@ const OrderDetailScreen = ({ navigation, route }) => {
           <View style={{ width: 26 }} />
         </View>
 
-        {/* Trạng thái đơn hàng */}
         {!isCancelled ? (
           <View style={styles.orderStatus}>
             <View style={styles.progressBar}>
@@ -244,7 +256,6 @@ const OrderDetailScreen = ({ navigation, route }) => {
           </View>
         )}
 
-        {/* Thông tin người nhận hàng */}
         <View style={styles.orderInfo}>
           <Text style={styles.infoTitle}>Thông tin người nhận hàng</Text>
           <View style={styles.infoItem}>
@@ -261,7 +272,6 @@ const OrderDetailScreen = ({ navigation, route }) => {
           </View>
         </View>
 
-        {/* Sản phẩm */}
         <View style={styles.productSection}>
           <Text style={styles.sectionTitle}>Thông tin sản phẩm</Text>
           <FlatList
@@ -270,10 +280,9 @@ const OrderDetailScreen = ({ navigation, route }) => {
             renderItem={({ item }) => (
               <View style={styles.productItem}>
                 <Image
-                  source={{
-                    uri: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
-                  }}
+                  source={getImageSource(item)}
                   style={styles.productImage}
+                  resizeMode="cover"
                 />
                 <View style={styles.productDetails}>
                   <Text style={styles.productName} numberOfLines={2}>
@@ -295,7 +304,6 @@ const OrderDetailScreen = ({ navigation, route }) => {
           />
         </View>
 
-        {/* Chi tiết thanh toán */}
         <View style={styles.paymentSection}>
           <Text style={styles.sectionTitle}>Chi tiết đơn hàng</Text>
           <View style={styles.paymentItem}>
@@ -333,7 +341,6 @@ const OrderDetailScreen = ({ navigation, route }) => {
         <View style={{ height: 120 }} />
       </ScrollView>
 
-      {/* Nút cố định dưới cùng */}
       {isShipped && (
         <View style={styles.fixedButtonContainer}>
           {!order.reviewed && (
@@ -395,8 +402,6 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
   },
   headerTitle: { fontSize: 18, fontWeight: "bold", color: "#000" },
-
-  // Progress Bar
   orderStatus: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   progressBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   stepContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -404,8 +409,6 @@ const styles = StyleSheet.create({
   progressLineActive: { backgroundColor: "#2e7d32" },
   progressLabel: { marginTop: 6, fontSize: 11, color: "#999", textAlign: "center" },
   progressLabelActive: { color: "#2e7d32", fontWeight: "600" },
-
-  // Đơn bị hủy
   cancelledStatusContainer: {
     backgroundColor: "#fdf2f2",
     padding: 16,
@@ -417,16 +420,12 @@ const styles = StyleSheet.create({
   },
   cancelledStatusText: { fontSize: 15, color: "#e74c3c", fontWeight: "600", textAlign: "center" },
   cancelReasonText: { fontSize: 13, color: "#c0392b", marginTop: 6, fontStyle: "italic", textAlign: "center" },
-
-  // Thông tin nhận hàng
   orderInfo: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   infoTitle: { fontSize: 16, fontWeight: "bold", color: "#333", marginBottom: 10 },
   infoItem: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   infoLabel: { fontSize: 14, color: "#666" },
   infoValue: { fontSize: 14, color: "#333", textAlign: "right" },
   addressValue: { flexShrink: 1, flexWrap: "wrap", maxWidth: "70%", textAlign: "right" },
-
-  // Sản phẩm
   productSection: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   sectionTitle: { fontSize: 16, fontWeight: "bold", color: "#333", marginBottom: 10 },
   productItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
@@ -437,14 +436,10 @@ const styles = StyleSheet.create({
   productPrice: { fontSize: 14, color: "#e67e22", fontWeight: "bold", marginTop: 2 },
   productTotal: { fontSize: 14, color: "#e67e22", fontWeight: "bold", marginLeft: 10, minWidth: 80, textAlign: "right" },
   separator: { height: 1, backgroundColor: "#eee" },
-
-  // Thanh toán
   paymentSection: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   paymentItem: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   paymentLabel: { fontSize: 14, color: "#666" },
   paymentValue: { fontSize: 14, color: "#333" },
-
-  // Nút cố định
   fixedButtonContainer: {
     position: "absolute",
     bottom: 20,

@@ -21,6 +21,7 @@ const NotificationsScreen = ({ navigation }) => {
   const [orderUpdates, setOrderUpdates] = useState([]);
 
   const currentUser = auth().currentUser;
+
   if (!currentUser) {
     return (
       <View style={styles.loggedOutContainer}>
@@ -30,8 +31,19 @@ const NotificationsScreen = ({ navigation }) => {
     );
   }
 
+  const getImageSource = (item) => {
+    if (item?.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item?.imageUrl) {
+      return { uri: item.imageUrl };
+    }
+    return { uri: "https://via.placeholder.com/80/E8F5E8/27ae60?text=Delivered" };
+  };
+
   useEffect(() => {
     setLoading(true);
+
     const unsubGeneral = firestore()
       .collection("notifications")
       .where("userId", "==", currentUser.uid)
@@ -67,28 +79,35 @@ const NotificationsScreen = ({ navigation }) => {
         }
 
         const updates = [];
+
         for (const doc of snap.docs) {
           const noti = doc.data();
-          let imageUrl = null;
+
+          let firstItemImage = null;
           try {
-            const orderSnap = await firestore().collection("orders").doc(noti.orderId).get();
+            const orderSnap = await firestore()
+              .collection("orders")
+              .doc(noti.orderId)
+              .get();
+
             if (orderSnap.exists) {
               const items = orderSnap.data()?.items || [];
               if (items.length > 0) {
-                imageUrl = items[0].imageUrl;
+                const firstItem = items[0];
+                firstItemImage = firstItem.imageBase64 || firstItem.imageUrl || null;
               }
             }
           } catch (e) {
+            console.log("Lỗi lấy ảnh đơn hàng:", e);
           }
 
           updates.push({
             id: doc.id,
             orderId: noti.orderId,
             title: `Đơn hàng ${noti.orderId} đã được giao thành công. Cảm ơn bạn đã mua sắm!`,
-            imageUrl:
-              imageUrl ||
-              "https://via.placeholder.com/80/E8F5E8/27ae60?text=Delivered",
+            imageData: firstItemImage,
             time: noti.createdAt?.toDate(),
+            read: noti.read || false,
           });
         }
 
@@ -101,7 +120,6 @@ const NotificationsScreen = ({ navigation }) => {
       });
 
     return () => {
-      unsubGeneral();
       unsubGeneral();
       unsubOrders();
     };
@@ -125,49 +143,56 @@ const NotificationsScreen = ({ navigation }) => {
   };
 
   const renderGeneralItem = ({ item }) => (
-  <TouchableOpacity
-    style={[styles.notificationCard, !item.read && styles.unreadCard]}
-    onPress={async () => {
-      if (!item.read) {
-        await firestore()
-          .collection("notifications")
-          .doc(item.id)
-          .update({ read: true });
-      }
-    }}
-  >
-    <View style={[styles.iconCircle, { backgroundColor: getColor(item.type) + "20" }]}>
-      <Icon name={getIcon(item.type)} size={24} color={getColor(item.type)} />
-    </View>
-    <View style={styles.content}>
-      <Text style={[styles.title, !item.read && styles.unreadText]}>{item.title}</Text>
-      <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
-      <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
-    </View>
-    {!item.read && <View style={styles.unreadDot} />}
-  </TouchableOpacity>
-);
+    <TouchableOpacity
+      style={[styles.notificationCard, !item.read && styles.unreadCard]}
+      onPress={async () => {
+        if (!item.read) {
+          try {
+            await firestore().collection("notifications").doc(item.id).update({ read: true });
+          } catch (e) {}
+        }
+      }}
+    >
+      <View style={[styles.iconCircle, { backgroundColor: "#27ae6020" }]}>
+        <Icon name="notifications-outline" size={24} color="#27ae60" />
+      </View>
+      <View style={styles.content}>
+        <Text style={[styles.title, !item.read && styles.unreadText]}>
+          {item.title}
+        </Text>
+        <Text style={styles.message} numberOfLines={2}>
+          {item.message}
+        </Text>
+        <Text style={styles.time}>{formatTime(item.createdAt)}</Text>
+      </View>
+      {!item.read && <View style={styles.unreadDot} />}
+    </TouchableOpacity>
+  );
 
-const renderOrderItem = ({ item }) => (
-  <TouchableOpacity
-    style={styles.orderItem}
-    onPress={async () => {
-      await firestore()
-        .collection("notifications")
-        .doc(item.id)
-        .update({ read: true });
-      navigation.navigate("OrderDetail", { orderId: item.orderId });
-    }}
-  >
-    <Image source={{ uri: item.imageUrl }} style={styles.orderImage} />
-    <View style={styles.orderContent}>
-      <Text style={styles.orderTitle}>{item.title}</Text>
-      <Text style={styles.orderIdText}>Mã đơn: {item.orderId}</Text>
-      <Text style={styles.orderTime}>{formatTime(item.time)}</Text>
-    </View>
-    <Icon name="chevron-forward" size={22} color="#aaa" />
-  </TouchableOpacity>
-);
+  const renderOrderItem = ({ item }) => (
+    <TouchableOpacity
+      style={styles.orderItem}
+      onPress={async () => {
+        try {
+          await firestore().collection("notifications").doc(item.id).update({ read: true });
+        } catch (e) {}
+        navigation.navigate("OrderDetail", { orderId: item.orderId });
+      }}
+    >
+      <Image
+        source={getImageSource({ imageBase64: item.imageData, imageUrl: item.imageData })}
+        style={styles.orderImage}
+        resizeMode="cover"
+      />
+      <View style={styles.orderContent}>
+        <Text style={styles.orderTitle}>{item.title}</Text>
+        <Text style={styles.orderIdText}>Mã đơn: {item.orderId}</Text>
+        <Text style={styles.orderTime}>{formatTime(item.time)}</Text>
+      </View>
+      <Icon name="chevron-forward" size={22} color="#aaa" />
+    </TouchableOpacity>
+  );
+
   const sections = [
     { title: null, data: generalNotifications },
     { title: "Cập nhật đơn hàng", data: orderUpdates },
@@ -222,94 +247,27 @@ export default NotificationsScreen;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8f9fa" },
-  loggedOutContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#f8f9fa",
-  },
+  loggedOutContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8f9fa" },
   loggedOutText: { marginTop: 16, fontSize: 16, color: "#999" },
-  header: {
-    backgroundColor: "#27ae60",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 40,
-    paddingBottom: 10,
-  },
+  header: { backgroundColor: "#27ae60", flexDirection: "row", alignItems: "center", justifyContent: "center", paddingTop: 40, paddingBottom: 10 },
   headerTitle: { fontSize: 20, fontWeight: "bold", color: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8f9fa" },
-
-  sectionHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#f8f9fa",
-  },
+  sectionHeader: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#f8f9fa" },
   sectionTitle: { fontSize: 17, fontWeight: "bold", color: "#333" },
-  notificationCard: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginVertical: 5,
-    padding: 14,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  unreadCard: {
-    backgroundColor: "#f8fff8",
-    borderLeftWidth: 4,
-    borderLeftColor: "#27ae60",
-  },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
+  notificationCard: { flexDirection: "row", backgroundColor: "#fff", marginHorizontal: 16, marginVertical: 5, padding: 14, borderRadius: 12, elevation: 2 },
+  unreadCard: { backgroundColor: "#f8fff8", borderLeftWidth: 4, borderLeftColor: "#27ae60" },
+  iconCircle: { width: 48, height: 48, borderRadius: 24, justifyContent: "center", alignItems: "center", marginRight: 12 },
   content: { flex: 1 },
   title: { fontSize: 15, fontWeight: "600", color: "#333" },
   unreadText: { fontWeight: "bold", color: "#27ae60" },
   message: { fontSize: 13.5, color: "#666", marginTop: 4, lineHeight: 19 },
   time: { fontSize: 12, color: "#999", marginTop: 6 },
-  unreadDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#e74c3c",
-    position: "absolute",
-    top: 16,
-    right: 16,
-  },
-  orderItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    marginHorizontal: 16,
-    marginVertical: 6,
-    padding: 14,
-    borderRadius: 12,
-    elevation: 2,
-  },
-  orderImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
-    marginRight: 14,
-  },
+  unreadDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#e74c3c", position: "absolute", top: 16, right: 16 },
+  orderItem: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", marginHorizontal: 16, marginVertical: 6, padding: 14, borderRadius: 12, elevation: 2 },
+  orderImage: { width: 64, height: 64, borderRadius: 10, marginRight: 14 },
   orderContent: { flex: 1 },
-  orderTitle: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#27ae60",
-    marginBottom: 4,
-  },
-  orderIdText: {
-    fontSize: 13,
-    color: "#555",
-    fontWeight: "500",
-  },
+  orderTitle: { fontSize: 15, fontWeight: "600", color: "#27ae60", marginBottom: 4 },
+  orderIdText: { fontSize: 13, color: "#555", fontWeight: "500" },
   orderTime: { fontSize: 12, color: "#999", marginTop: 4 },
   empty: { flex: 1, justifyContent: "center", alignItems: "center", paddingTop: 100 },
   emptyText: { fontSize: 16, color: "#aaa", marginTop: 16 },

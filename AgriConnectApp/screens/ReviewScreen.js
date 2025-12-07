@@ -12,6 +12,16 @@ import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 
+const getImageSource = (item) => {
+  if (item?.imageBase64) {
+    return { uri: item.imageBase64 };
+  }
+  if (item?.imageUrl) {
+    return { uri: item.imageUrl };
+  }
+  return { uri: "https://via.placeholder.com/80/eeeeee/999999?text=No+Image" };
+};
+
 const ReviewScreen = ({ navigation }) => {
   const [activeTab, setActiveTab] = useState("pending");
   const [pendingReviews, setPendingReviews] = useState([]);
@@ -22,7 +32,6 @@ const ReviewScreen = ({ navigation }) => {
 
   const uid = auth().currentUser?.uid;
 
-  // Lấy thông tin user (tên + avatar)
   useEffect(() => {
     if (!uid) return;
 
@@ -42,7 +51,6 @@ const ReviewScreen = ({ navigation }) => {
     fetchUserInfo();
   }, [uid]);
 
-  // MAIN EFFECT – Realtime orders + realtime reviews
   useEffect(() => {
     if (!uid) return;
 
@@ -50,7 +58,6 @@ const ReviewScreen = ({ navigation }) => {
     let reviewsUnsubscribe = () => {};
 
     const setupListeners = () => {
-      // 1. Lắng nghe realtime các đơn hàng
       ordersUnsubscribe = firestore()
         .collection("orders")
         .where("userId", "==", uid)
@@ -66,13 +73,11 @@ const ReviewScreen = ({ navigation }) => {
 
           setLoading(true);
 
-          // 2. Lắng nghe realtime tất cả review của user này
           reviewsUnsubscribe = firestore()
             .collection("reviews")
             .where("userId", "==", uid)
             .onSnapshot(
               (reviewsSnapshot) => {
-                // Tạo map review: key = orderId_productId
                 const reviewsMap = {};
                 reviewsSnapshot.forEach((doc) => {
                   const data = doc.data();
@@ -82,19 +87,11 @@ const ReviewScreen = ({ navigation }) => {
 
                 processOrdersWithReviews(ordersSnapshot, reviewsMap);
               },
-              (error) => {
-                console.log("Lỗi realtime reviews:", error);
-                // Fallback nếu lỗi realtime
-                fallbackLoadReviews(ordersSnapshot);
-              }
+              () => fallbackLoadReviews(ordersSnapshot)
             );
-        }, (error) => {
-          console.log("Lỗi realtime orders:", error);
-          setLoading(false);
-        });
+        }, () => setLoading(false));
     };
 
-    // Hàm xử lý chính – tách ra để dễ đọc
     const processOrdersWithReviews = (ordersSnapshot, reviewsMap) => {
       const pending = [];
       const reviewed = [];
@@ -103,22 +100,16 @@ const ReviewScreen = ({ navigation }) => {
         const orderData = { id: orderDoc.id, ...orderDoc.data() };
         if (!orderData.items || orderData.items.length === 0) return;
 
-        // Format thời gian đặt hàng
-        let orderDateTime = "Chưa xác định";
-        if (orderData.createdAt?.toDate) {
-          const date = orderData.createdAt.toDate();
-          orderDateTime = date
-            .toLocaleString("vi-VN", {
+        const orderDateTime = orderData.createdAt?.toDate?.()
+          ? orderData.createdAt.toDate().toLocaleString("vi-VN", {
               day: "2-digit",
               month: "2-digit",
               year: "numeric",
               hour: "2-digit",
               minute: "2-digit",
-            })
-            .replace(",", " lúc");
-        }
+            }).replace(",", " lúc")
+          : "Chưa xác định";
 
-        // Group theo nông dân
         const groupedByFarmer = {};
         let hasAnyReview = false;
         let latestReviewTime = 0;
@@ -137,18 +128,17 @@ const ReviewScreen = ({ navigation }) => {
           const key = `${orderData.id}_${item.id}`;
           const review = reviewsMap[key] || null;
 
-          if (review) {
+          if (review && review.createdAt?.toDate) {
             hasAnyReview = true;
-            if (review.createdAt?.toDate) {
-              const time = review.createdAt.toDate().getTime();
-              if (time > latestReviewTime) latestReviewTime = time;
-            }
+            const time = review.createdAt.toDate().getTime();
+            if (time > latestReviewTime) latestReviewTime = time;
           }
 
           groupedByFarmer[sellerId].products.push({
             productId: item.id,
             name: item.name,
-            imageUrl: item.imageUrl,
+            imageBase64: item.imageBase64 || null,
+            imageUrl: item.imageUrl || null,
             season: item.season,
             review,
           });
@@ -162,7 +152,6 @@ const ReviewScreen = ({ navigation }) => {
           latestReviewTime,
         };
 
-        // Logic phân loại tab
         if (!hasAnyReview && orderData.status === "shipping") {
           pending.push(order);
         } else if (hasAnyReview) {
@@ -171,29 +160,21 @@ const ReviewScreen = ({ navigation }) => {
       });
 
       reviewed.sort((a, b) => b.latestReviewTime - a.latestReviewTime);
-
       setPendingReviews(pending);
       setReviewedOrders(reviewed);
       setLoading(false);
     };
 
-    // Fallback nếu realtime reviews lỗi
     const fallbackLoadReviews = async (ordersSnapshot) => {
       try {
-        const snap = await firestore()
-          .collection("reviews")
-          .where("userId", "==", uid)
-          .get();
-
+        const snap = await firestore().collection("reviews").where("userId", "==", uid).get();
         const reviewsMap = {};
         snap.forEach((doc) => {
           const data = doc.data();
           reviewsMap[`${data.orderId}_${data.productId}`] = { id: doc.id, ...data };
         });
-
         processOrdersWithReviews(ordersSnapshot, reviewsMap);
       } catch (err) {
-        console.log("Fallback cũng lỗi:", err);
         setLoading(false);
       }
     };
@@ -213,16 +194,14 @@ const ReviewScreen = ({ navigation }) => {
   const formatReviewTime = (timestamp) => {
     if (!timestamp?.toDate) return "Vừa xong";
     const date = timestamp.toDate();
-    return date
-      .toLocaleString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      })
-      .replace(",", " lúc");
+    return date.toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).replace(",", " lúc");
   };
 
   const OrderHeader = ({ order }) => (
@@ -247,8 +226,9 @@ const ReviewScreen = ({ navigation }) => {
           {farmer.products.map((product) => (
             <View key={product.productId} style={styles.productItem}>
               <Image
-                source={{ uri: product.imageUrl || "https://via.placeholder.com/80" }}
+                source={getImageSource(product)}
                 style={styles.productImage}
+                resizeMode="cover"
               />
               <View style={styles.productInfo}>
                 <Text style={styles.productTitle} numberOfLines={2}>
@@ -264,10 +244,7 @@ const ReviewScreen = ({ navigation }) => {
         </View>
       ))}
 
-      <TouchableOpacity
-        style={styles.reviewBtn}
-        onPress={() => handleReview(item.id)}
-      >
+      <TouchableOpacity style={styles.reviewBtn} onPress={() => handleReview(item.id)}>
         <Text style={styles.reviewBtnText}>Đánh giá ngay</Text>
       </TouchableOpacity>
     </View>
@@ -282,8 +259,9 @@ const ReviewScreen = ({ navigation }) => {
           {farmer.products.map((product) => (
             <View key={product.productId} style={styles.productItem}>
               <Image
-                source={{ uri: product.imageUrl || "https://via.placeholder.com/80" }}
+                source={getImageSource(product)}
                 style={styles.productImage}
+                resizeMode="cover"
               />
               <View style={styles.productInfo}>
                 <Text style={styles.productTitle} numberOfLines={2}>
@@ -294,9 +272,7 @@ const ReviewScreen = ({ navigation }) => {
                   <View style={styles.reviewContainer}>
                     <View style={styles.reviewerInfo}>
                       <Image
-                        source={{
-                          uri: userAvatar || "https://via.placeholder.com/80/666/fff?text=U",
-                        }}
+                        source={getImageSource({ imageBase64: userAvatar })}
                         style={styles.reviewerAvatar}
                       />
                       <View>
@@ -332,9 +308,7 @@ const ReviewScreen = ({ navigation }) => {
                     </View>
 
                     {product.review.comment ? (
-                      <Text style={styles.reviewComment}>
-                        {product.review.comment}
-                      </Text>
+                      <Text style={styles.reviewComment}>{product.review.comment}</Text>
                     ) : (
                       <Text style={styles.noComment}>Không có nhận xét</Text>
                     )}
@@ -378,12 +352,7 @@ const ReviewScreen = ({ navigation }) => {
           style={[styles.tab, activeTab === "pending" && styles.activeTab]}
           onPress={() => setActiveTab("pending")}
         >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "pending" && styles.activeTabText,
-            ]}
-          >
+          <Text style={[styles.tabText, activeTab === "pending" && styles.activeTabText]}>
             Chưa đánh giá ({pendingReviews.length})
           </Text>
         </TouchableOpacity>
@@ -392,12 +361,7 @@ const ReviewScreen = ({ navigation }) => {
           style={[styles.tab, activeTab === "reviewed" && styles.activeTab]}
           onPress={() => setActiveTab("reviewed")}
         >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "reviewed" && styles.activeTabText,
-            ]}
-          >
+          <Text style={[styles.tabText, activeTab === "reviewed" && styles.activeTabText]}>
             Đã đánh giá ({reviewedOrders.length})
           </Text>
         </TouchableOpacity>
@@ -448,11 +412,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderColor: "#eee",
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 16,
-    alignItems: "center",
-  },
+  tab: { flex: 1, paddingVertical: 16, alignItems: "center" },
   activeTab: { borderBottomWidth: 3, borderColor: "#d32f2f" },
   tabText: { fontSize: 15, color: "#777", fontWeight: "600" },
   activeTabText: { color: "#d32f2f", fontWeight: "700" },
@@ -469,17 +429,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
   },
-  orderHeader: {
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderColor: "#eee",
-  },
-  orderInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
+  orderHeader: { marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderColor: "#eee" },
+  orderInfoRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   orderLabel: { fontSize: 14, color: "#666" },
   orderCode: { fontSize: 14, fontWeight: "bold", color: "#d32f2f" },
   orderDateText: { fontSize: 14, color: "#333", fontWeight: "500" },

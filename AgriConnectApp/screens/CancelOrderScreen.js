@@ -27,6 +27,15 @@ const CancelOrderScreen = ({ navigation, route }) => {
     { id: 5, label: "Khác" },
   ];
 
+  const getImageSource = (item) => {
+    if (item.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item.imageUrl) {
+      return { uri: item.imageUrl };
+    }
+  };
+
   const handleContinue = async () => {
     if (!selectedReason) {
       Alert.alert("Lỗi", "Vui lòng chọn lý do hủy đơn!");
@@ -87,7 +96,7 @@ const CancelOrderScreen = ({ navigation, route }) => {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Icon name="arrow-back" size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Hủy đơn hàng</Text>
+          <Text style={styles.headerTitle}>HỦY ĐƠN HÀNG</Text>
           <View style={{ width: 24 }} />
         </View>
 
@@ -98,7 +107,6 @@ const CancelOrderScreen = ({ navigation, route }) => {
         >
           {order ? (
             <View style={styles.orderCard}>
-              {/* Phần thông tin đơn hàng */}
               <View style={styles.shopHeader}>
                 <View style={styles.shopInfo}>
                   <Text style={styles.shopName}>Thông tin đơn hàng</Text>
@@ -138,11 +146,7 @@ const CancelOrderScreen = ({ navigation, route }) => {
                   ]}
                 >
                   <Image
-                    source={{
-                      uri:
-                        product.imageUrl ||
-                        "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
-                    }}
+                    source={getImageSource(product)}
                     style={styles.productImage}
                     resizeMode="cover"
                   />
@@ -161,7 +165,6 @@ const CancelOrderScreen = ({ navigation, route }) => {
               ))}
 
               <View style={styles.totalContainer}>
-                {/* Tổng tiền sản phẩm */}
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Tổng tiền sản phẩm:</Text>
                   <Text style={[styles.totalPrice, isCancelled && styles.totalCancelled]}>
@@ -172,7 +175,6 @@ const CancelOrderScreen = ({ navigation, route }) => {
                   </Text>
                 </View>
 
-                {/* Phí vận chuyển */}
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Phí vận chuyển:</Text>
                   <Text style={[styles.totalPrice, isCancelled && styles.totalCancelled]}>
@@ -182,7 +184,6 @@ const CancelOrderScreen = ({ navigation, route }) => {
                   </Text>
                 </View>
 
-                {/* Thành tiền */}
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Thành tiền:</Text>
                   <Text
@@ -202,7 +203,6 @@ const CancelOrderScreen = ({ navigation, route }) => {
             <Text style={styles.errorText}>Không tìm thấy thông tin đơn hàng.</Text>
           )}
 
-          {/* Phần lý do hủy đơn hàng */}
           <Text style={styles.question}>Tại sao bạn muốn hủy đơn hàng?</Text>
 
           {cancelReasons.map((reason) => (

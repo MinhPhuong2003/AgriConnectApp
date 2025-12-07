@@ -23,7 +23,7 @@ const OrderSuccessScreen = ({ navigation, route }) => {
             style={styles.detailButton}
             onPress={() => navigation.navigate("OrderDetail", { orderId, items })}
           >
-            <Text style={styles.buttonText}>Chi tiết</Text>
+            <Text style={styles.buttonText}>Xem chi tiết</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.homeButton}

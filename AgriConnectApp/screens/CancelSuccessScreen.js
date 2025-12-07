@@ -10,13 +10,15 @@ import {
 import Icon from "react-native-vector-icons/Ionicons";
 
 const CancelSuccessScreen = ({ navigation, route }) => {
-  const { order, reason, requestId, cancelDate, orderId } = route.params || {};
+  const { order, reason, cancelDate, orderId } = route.params || {};
 
-  const isCancelled = order?.status === "cancelled";
-
-  const formatDate = (date) => {
-    if (!date) return "Chưa xác định";
-    return new Date(date).toLocaleDateString("vi-VN");
+  const getImageSource = (item) => {
+    if (item.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item.imageUrl) {
+      return { uri: item.imageUrl };
+    }
   };
 
   return (
@@ -25,7 +27,7 @@ const CancelSuccessScreen = ({ navigation, route }) => {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Hủy đơn hàng</Text>
+        <Text style={styles.headerTitle}>HỦY ĐƠN HÀNG</Text>
         <View style={{ width: 24 }} />
       </View>
 
@@ -46,7 +48,6 @@ const CancelSuccessScreen = ({ navigation, route }) => {
                 </Text>
               </View>
 
-              {/* Thông tin hủy */}
               <View style={styles.cancelInfoContainer}>
                 <Text style={styles.cancelDate}>
                   Đơn hàng đã hủy vào ngày {cancelDate}
@@ -58,7 +59,6 @@ const CancelSuccessScreen = ({ navigation, route }) => {
                 )}
               </View>
 
-              {/* Danh sách sản phẩm */}
               {order.items.map((product, index) => (
                 <View
                   key={product.id + index}
@@ -68,11 +68,7 @@ const CancelSuccessScreen = ({ navigation, route }) => {
                   ]}
                 >
                   <Image
-                    source={{
-                      uri:
-                        product.imageUrl ||
-                        "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
-                    }}
+                    source={getImageSource(product)}
                     style={styles.productImage}
                     resizeMode="cover"
                   />
@@ -93,7 +89,6 @@ const CancelSuccessScreen = ({ navigation, route }) => {
                 </View>
               ))}
 
-              {/* Tổng tiền */}
               <View style={styles.totalContainer}>
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>Tổng tiền sản phẩm:</Text>
@@ -123,20 +118,6 @@ const CancelSuccessScreen = ({ navigation, route }) => {
                   </Text>
                 </View>
               </View>
-            </View>        
-
-            {/* Đánh giá trải nghiệm */}
-            <View style={styles.ratingSection}>
-              <Text style={styles.ratingTitle}>
-                Bạn hài lòng với trải nghiệm hủy đơn hàng chứ?
-              </Text>
-              <View style={styles.stars}>
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <TouchableOpacity key={star} style={styles.star}>
-                    <Icon name="star-outline" size={36} color="#f1c40f" />
-                  </TouchableOpacity>
-                ))}
-              </View>
             </View>
           </>
         ) : (
@@ -144,7 +125,6 @@ const CancelSuccessScreen = ({ navigation, route }) => {
         )}
       </ScrollView>
 
-      {/* Nút hành động */}
       <View style={styles.bottomButtons}>
         <TouchableOpacity
           style={styles.detailButton}
@@ -269,15 +249,7 @@ const styles = StyleSheet.create({
   detailValueContainer: { flexDirection: "row", alignItems: "center" },
   detailValue: { fontSize: 14, color: "#333" },
 
-  ratingSection: { marginTop: 32, alignItems: "center" },
-  ratingTitle: {
-    fontSize: 14,
-    color: "#333",
-    textAlign: "center",
-    marginBottom: 16,
-    paddingHorizontal: 20,
-  },
-  stars: { flexDirection: "row", gap: 8 },
+  
   star: { padding: 4 },
 
   bottomButtons: {

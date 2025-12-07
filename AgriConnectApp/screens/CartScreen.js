@@ -13,7 +13,6 @@ import {
 import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
-
 const CartScreen = ({ navigation }) => {
   const [selectedAll, setSelectedAll] = useState(false);
   const [cartItems, setCartItems] = useState([]);
@@ -196,11 +195,19 @@ const CartScreen = ({ navigation }) => {
     );
   };
 
-  // Ẩ thanh tab khi vào giỏ hàng
   useEffect(() => {
     navigation.getParent()?.setOptions({ tabBarStyle: { display: "none" } });
     return () => navigation.getParent()?.setOptions({ tabBarStyle: undefined });
   }, [navigation]);
+
+  const getImageUri = (item) => {
+    if (item.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item.imageUrl) {
+      return { uri: item.imageUrl };
+    }
+  };
 
   const renderCartItem = ({ item }) => (
     <View style={styles.cartItem}>
@@ -212,7 +219,12 @@ const CartScreen = ({ navigation }) => {
         />
       </TouchableOpacity>
 
-      <Image source={{ uri: item.imageUrl }} style={styles.itemImage} />
+      <Image
+        source={getImageUri(item)}
+        style={styles.itemImage}
+        
+        resizeMode="cover"
+      />
 
       <View style={styles.itemInfo}>
         <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
@@ -377,7 +389,7 @@ const styles = StyleSheet.create({
   totalCountText: { fontSize: 14, color: "#2e7d32", fontWeight: "600", marginTop: 2 },
   checkoutBtn: { 
     marginHorizontal: 16, 
-    marginVertical: 12, 
+    marginVertical: 18, 
     backgroundColor: "#e74c3c", 
     paddingVertical: 14, 
     borderRadius: 12, 

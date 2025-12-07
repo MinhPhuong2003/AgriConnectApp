@@ -83,7 +83,6 @@ const CheckoutScreen = ({ navigation, route }) => {
     });
   };
 
-  // === XỬ LÝ PHƯƠNG THỨC VẬN CHUYỂN ===
   const handleShippingMethodPress = () => {
     navigation.navigate("ShippingMethod", {
       shippingMethod,
@@ -93,7 +92,6 @@ const CheckoutScreen = ({ navigation, route }) => {
     });
   };
 
-  // === XỬ LÝ PHƯƠNG THỨC THANH TOÁN ===
   const handlePaymentMethodPress = () => {
     navigation.navigate("PaymentMethod", {
       selectedPayment: paymentMethod,
@@ -101,11 +99,18 @@ const CheckoutScreen = ({ navigation, route }) => {
     });
   };
 
-  // === TÍNH PHÍ VÀ TỔNG CUỐI ===
   const shippingFee = shippingMethod.fee || 0;
   const finalTotal = totalPrice + shippingFee;
 
-  // === XỬ LÝ ĐẶT HÀNG ===
+  const getImageSource = (item) => {
+    if (item.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item.imageUrl) {
+      return { uri: item.imageUrl };
+    }
+  };
+
   const handlePlaceOrder = async () => {
     const uid = auth().currentUser?.uid;
     if (!uid) {
@@ -134,7 +139,8 @@ const CheckoutScreen = ({ navigation, route }) => {
         items: items.map((item) => ({
           id: item.id,
           name: item.name,
-          imageUrl: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
+          imageBase64: item.imageBase64 || null,
+          imageUrl: item.imageBase64 ? null : (item.imageUrl || null),
           price: item.price,
           quantity: item.quantity,
           discount: item.discount || 0,
@@ -158,9 +164,7 @@ const CheckoutScreen = ({ navigation, route }) => {
         updatedAt: firestore.FieldValue.serverTimestamp(),
         reviewed: false,
       };
-      // 1. Tạo đơn hàng
       const orderRef = await firestore().collection("orders").add(orderData);
-      // 2. Xóa sản phẩm đã chọn khỏi giỏ hàng
       const cartRef = firestore().collection("carts").doc(uid);
       await firestore().runTransaction(async (transaction) => {
         const cartDoc = await transaction.get(cartRef);
@@ -171,7 +175,6 @@ const CheckoutScreen = ({ navigation, route }) => {
           transaction.set(cartRef, { items: remainingItems }, { merge: true });
         }
       });
-      // 3. Chuyển sang màn thành công
       navigation.replace("OrderSuccess", {
         orderId: orderRef.id,
         finalTotal,
@@ -187,7 +190,6 @@ const CheckoutScreen = ({ navigation, route }) => {
     }
   };
 
-  // === HIỂN THỊ LOADING ===
   if (loading) {
     return (
       <View style={styles.loader}>
@@ -198,7 +200,6 @@ const CheckoutScreen = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
-      {/* HEADER */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Icon name="arrow-back" size={26} color="#000" />
@@ -213,7 +214,6 @@ const CheckoutScreen = ({ navigation, route }) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ĐỊA CHỈ */}
         <TouchableOpacity style={styles.section} onPress={handleAddressPress}>
           <Icon name="location-outline" size={20} color="#2e7d32" />
           <View style={styles.addressInfo}>
@@ -224,11 +224,14 @@ const CheckoutScreen = ({ navigation, route }) => {
           <Icon name="chevron-forward" size={20} color="#999" />
         </TouchableOpacity>
 
-        {/* DANH SÁCH SẢN PHẨM */}
         <View style={styles.productSection}>
           {items.map((item) => (
             <View key={item.id} style={styles.productItem}>
-              <Image source={{ uri: item.imageUrl }} style={styles.productImage} />
+              <Image
+                source={getImageSource(item)}
+                style={styles.productImage}
+                resizeMode="cover"
+              />
               <View style={styles.productInfo}>
                 <Text style={styles.productName} numberOfLines={2}>
                   {item.name}
@@ -244,7 +247,6 @@ const CheckoutScreen = ({ navigation, route }) => {
           ))}
         </View>
 
-        {/* VẬN CHUYỂN */}
         <TouchableOpacity style={styles.section} onPress={handleShippingMethodPress}>
           <Icon name="car-outline" size={20} color="#2e7d32" />
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -255,7 +257,6 @@ const CheckoutScreen = ({ navigation, route }) => {
           <Icon name="chevron-forward" size={20} color="#999" />
         </TouchableOpacity>
 
-        {/* THANH TOÁN */}
         <TouchableOpacity style={styles.section} onPress={handlePaymentMethodPress}>
           <Icon name="card-outline" size={20} color="#2e7d32" />
           <View style={{ flex: 1, marginLeft: 12 }}>
@@ -266,7 +267,6 @@ const CheckoutScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* THANH TOÁN CỐ ĐỊNH DƯỚI MÀN HÌNH */}
       <View style={styles.fixedPaymentSection}>
         <View style={styles.detailRow}>
           <Text style={styles.detailLabel}>Tạm tính</Text>

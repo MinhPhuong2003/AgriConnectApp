@@ -16,8 +16,6 @@ import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 
-const PLACEHOLDER = "https://cdn-icons-png.flaticon.com/512/4202/4202843.png";
-
 const HomeBuyer = ({ route, navigation }) => {
   const { searchQuery: initialSearchQuery } = route.params || {};
   const [products, setProducts] = useState([]);
@@ -33,28 +31,10 @@ const HomeBuyer = ({ route, navigation }) => {
   const [isSearchMode, setIsSearchMode] = useState(!!initialSearchQuery);
   const scrollViewRef = useRef(null);
   const inputRef = useRef(null);
-
-  const [preorderSuccessModal, setPreorderSuccessModal] = useState(false);
-  const [currentPreorderProduct, setCurrentPreorderProduct] = useState(null);
-
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
-  };
-
-  const getEstimatedHarvest = (season) => {
-    const now = new Date();
-    const year = now.getFullYear();
-
-    const harvestMap = {
-      "Xuân": `Tháng 2 - 4/${year}`,
-      "Hạ": `Tháng 5 - 7/${year}`,
-      "Thu": `Tháng 8 - 10/${year}`,
-      "Đông": `Tháng 11/${year} - 1/${year + 1}`,
-    };
-
-    return harvestMap[season] || "Sắp có hàng";
   };
 
   useEffect(() => {
@@ -112,57 +92,7 @@ const HomeBuyer = ({ route, navigation }) => {
     return () => unsubscribe();
   }, []);
 
-  const addToPreorder = async (product) => {
-    const user = auth().currentUser;
-    if (!user) {
-      Alert.alert("Thông báo", "Vui lòng đăng nhập để đặt trước sản phẩm!");
-      return;
-    }
-    const cartRef = firestore().collection("carts").doc(user.uid);
-    try {
-      let finalQuantity = 1;
-      await firestore().runTransaction(async (transaction) => {
-        const cartDoc = await transaction.get(cartRef);
-        let preorders = [];
-        if (cartDoc.exists && cartDoc.data()?.preorders) {
-          preorders = cartDoc.data().preorders || [];
-          const existingIndex = preorders.findIndex(item => item.id === product.id);
-          if (existingIndex !== -1) {
-            preorders[existingIndex].quantity += 1;
-            finalQuantity = preorders[existingIndex].quantity;
-            transaction.update(cartRef, { preorders });
-            return;
-          }
-        }
-        const preorderItem = {
-          id: product.id,
-          name: product.name,
-          price: Math.round(product.price * (1 - (product.discount || 0) / 100)),
-          originalPrice: product.price,
-          discount: product.discount || 0,
-          imageUrl: product.imageUrl || PLACEHOLDER,
-          season: product.season || "Chưa xác định",
-          quantity: 1,
-          addedAt: new Date().toISOString(),
-          estimatedHarvest: getEstimatedHarvest(product.season),
-        };
-
-        preorders.push(preorderItem);
-        transaction.set(cartRef, { preorders }, { merge: true });
-        finalQuantity = 1;
-      });
-
-      setCurrentPreorderProduct({
-        ...product,
-        quantity: finalQuantity,
-      });
-      setPreorderSuccessModal(true);
-
-    } catch (error) {
-      console.error("Lỗi đặt trước:", error);
-      Alert.alert("Lỗi", "Không thể đặt trước. Vui lòng thử lại!");
-    }
-  };
+  
 
   const addToCart = async (product) => {
     const user = auth().currentUser;
@@ -170,9 +100,8 @@ const HomeBuyer = ({ route, navigation }) => {
       Alert.alert("Thông báo", "Vui lòng đăng nhập để thêm vào giỏ hàng!");
       return;
     }
-
+    setCartCount(prev => prev + 1);
     const cartRef = firestore().collection("carts").doc(user.uid);
-
     try {
       await firestore().runTransaction(async (transaction) => {
         const cartDoc = await transaction.get(cartRef);
@@ -181,35 +110,34 @@ const HomeBuyer = ({ route, navigation }) => {
         if (cartDoc.exists && cartDoc.data()) {
           cartItems = cartDoc.data().items || [];
         }
-
         const existingIndex = cartItems.findIndex((item) => item.id === product.id);
-
         const discountedPrice = Math.round(product.price * (1 - (product.discount || 0) / 100));
-
+        const imageToUse = product.imageBase64 || product.imageUrl;
         const cartItem = {
           id: product.id,
           name: product.name,
           price: discountedPrice,
           originalPrice: product.price,
           discount: product.discount || 0,
-          imageUrl: product.imageUrl || PLACEHOLDER,
+          imageBase64: product.imageBase64 || null,
+          imageUrl: product.imageBase64 ? null : imageToUse,
           quantity: 1,
-          sellerId: product.sellerId || product.farmerId || "unknown", 
-          farmerName: product.farmerName || product.sellerName || "Nông dân", 
+          sellerId: product.sellerId || product.farmerId || "unknown",
+          farmerName: product.farmerName || product.sellerName || "Nông dân",
           farmerAvatarUrl: product.farmerAvatarUrl || product.sellerAvatarUrl || null,
         };
 
         if (existingIndex >= 0) {
           cartItems[existingIndex].quantity += 1;
-          cartItems[existingIndex].sellerId = cartItem.sellerId;
-          cartItems[existingIndex].farmerName = cartItem.farmerName;
-          cartItems[existingIndex].farmerAvatarUrl = cartItem.farmerAvatarUrl;
+          cartItems[existingIndex].imageBase64 = cartItem.imageBase64;
+          cartItems[existingIndex].imageUrl = cartItem.imageUrl;
         } else {
           cartItems.push(cartItem);
         }
 
-        transaction.set(cartRef, { items: cartItems }, { merge: true });
+        transaction.set(cartRef, { items: cartItems, updatedAt: firestore.FieldValue.serverTimestamp() }, { merge: true });
       });
+
     } catch (error) {
       console.error("Lỗi thêm vào giỏ:", error);
       Alert.alert("Lỗi", "Không thể thêm vào giỏ. Vui lòng thử lại.");
@@ -246,7 +174,6 @@ const HomeBuyer = ({ route, navigation }) => {
 
   useEffect(() => {
     let isMounted = true;
-    // 1. Load sản phẩm lần đầu
     const loadProducts = async () => {
       try {
         const snap = await firestore()
@@ -271,7 +198,6 @@ const HomeBuyer = ({ route, navigation }) => {
       }
     };
     loadProducts();
-    // 2. Listener chính – bắt mọi review mới
     const unsub = firestore()
       .collection("reviews")
       .onSnapshot((snapshot) => {
@@ -286,7 +212,6 @@ const HomeBuyer = ({ route, navigation }) => {
           }
         });
       });
-    // Hàm cập nhật rating cho 1 sản phẩm
     const updateProductRating = async (productId) => {
       try {
         const reviewsSnap = await firestore()
@@ -401,7 +326,7 @@ const HomeBuyer = ({ route, navigation }) => {
     const discount = item.discount || 0;
     const originalPrice = item.price || 0;
     const discountedPrice = originalPrice * (1 - discount / 100);
-    const productImageUri = item.imageBase64 || item.imageUrl || PLACEHOLDER;
+    const productImageUri = item.imageBase64 || item.imageUrl;
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -466,14 +391,6 @@ const HomeBuyer = ({ route, navigation }) => {
 
           <View style={styles.buttonRow}>
             <TouchableOpacity
-              style={styles.preorderButton}
-              onPress={() => addToPreorder(item)}
-            >
-              <Icon name="time-outline" size={16} color="#ff9800" />
-              <Text style={styles.preorderText}>Đặt trước</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
               style={styles.addToCartButton}
               onPress={() => addToCart(item)}
             >
@@ -487,7 +404,6 @@ const HomeBuyer = ({ route, navigation }) => {
 
   return (
     <View style={styles.container}>
-      {/* HEADER – ĐÃ BỎ ICON ĐẶT TRƯỚC */}
       <View style={styles.header}>
         <View style={styles.searchRow}>
           {(isCategoryFilterMode || isSearchMode) && (
@@ -559,9 +475,7 @@ const HomeBuyer = ({ route, navigation }) => {
         </View>
       </View>
 
-      {/* PHẦN CÒN LẠI GIỮ NGUYÊN */}
       <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-        {/* ... toàn bộ phần dưới giữ nguyên như cũ ... */}
         {!(isSearchMode || isCategoryFilterMode) && (
           <>
             <View style={styles.bannerWrapper}>
@@ -727,84 +641,7 @@ const HomeBuyer = ({ route, navigation }) => {
           </View>
         )}
       </ScrollView>
-      {/* Modal Đặt trước thành công - XỊN SÒ */}
-      <Modal
-        transparent
-        visible={preorderSuccessModal}
-        animationType="none"
-        onRequestClose={() => setPreorderSuccessModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[
-            styles.successModalContainer,
-            {
-              transform: [
-                {
-                  scale: preorderSuccessModal ? 1 : 0.8,
-                },
-              ],
-              opacity: preorderSuccessModal ? 1 : 0,
-            }
-          ]}>
-            {/* Icon tick xanh */}
-            <View style={styles.successIcon}>
-              <Icon name="checkmark-circle" size={60} color="#27ae60" />
-            </View>
-
-            <Text style={styles.successTitle}>
-              Đặt trước thành công!
-            </Text>
-
-            {currentPreorderProduct && (
-              <View style={styles.successProductInfo}>
-                <Image
-                  source={{ 
-                    uri: currentPreorderProduct.imageBase64 || 
-                        currentPreorderProduct.imageUrl || 
-                        PLACEHOLDER 
-                  }}
-                  style={styles.successProductImage}
-                />
-                <View style={styles.successProductDetails}>
-                  <Text style={styles.successProductName} numberOfLines={2}>
-                    {currentPreorderProduct.name}
-                  </Text>
-                  {currentPreorderProduct.season && (
-                    <Text style={styles.successSeasonText}>
-                      Mùa: {currentPreorderProduct.season}
-                    </Text>
-                  )}
-                  <Text style={styles.successHarvestText}>
-                    Dự kiến thu hoạch: {currentPreorderProduct.estimatedHarvest || getEstimatedHarvest(currentPreorderProduct.season)}
-                  </Text>
-                  <Text style={styles.successQuantityText}>
-                    Số lượng: {currentPreorderProduct.quantity} kg
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            <View style={styles.successButtons}>
-              <TouchableOpacity
-                style={styles.successCloseButton}
-                onPress={() => setPreorderSuccessModal(false)}
-              >
-                <Text style={styles.successCloseText}>Đóng</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.successViewButton}
-                onPress={() => {
-                  setPreorderSuccessModal(false);
-                  navigation.navigate("Preorder");
-                }}
-              >
-                <Text style={styles.successViewText}>Xem chi tiết</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      
     </View>
   );
 };
@@ -889,8 +726,6 @@ const styles = StyleSheet.create({
   ratingText: { fontSize: 13, color: "#333", fontWeight: "600" },
   reviewCount: { fontSize: 12, color: "#777" },
   buttonRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 12 },
-  preorderButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff8e1", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: "#ffcc80", gap: 6 },
-  preorderText: { fontSize: 13, color: "#ff9800", fontWeight: "600" },
   addToCartButton: { backgroundColor: "#2e7d32", width: 36, height: 36, borderRadius: 18, justifyContent: "center", alignItems: "center" },
   emptyBox: { padding: 20, alignItems: "center" },
   emptyText: { color: "#555" },
@@ -926,93 +761,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     flex: 1,
     letterSpacing: 0.4,
-  },
-  successModalContainer: {
-    backgroundColor: "#fff",
-    marginHorizontal: 30,
-    borderRadius: 20,
-    padding: 20,
-    alignItems: "center",
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-  },
-  successIcon: {
-    marginBottom: 10,
-  },
-  successTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#27ae60",
-    marginBottom: 16,
-  },
-  successProductInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-    width: "100%",
-  },
-  successProductImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 12,
-    marginRight: 12,
-  },
-  successProductDetails: {
-    flex: 1,
-  },
-  successProductName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-  },
-  successSeasonText: {
-    fontSize: 14,
-    color: "#27ae60",
-    marginTop: 4,
-  },
-  successHarvestText: {
-    fontSize: 13,
-    color: "#666",
-    marginTop: 4,
-    fontStyle: "italic",
-  },
-  successQuantityText: {
-    fontSize: 14,
-    color: "#e67e22",
-    fontWeight: "bold",
-    marginTop: 6,
-  },
-  successButtons: {
-    flexDirection: "row",
-    gap: 12,
-    marginTop: 10,
-  },
-  successCloseButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#f0f0f0",
-    alignItems: "center",
-  },
-  successCloseText: {
-    fontSize: 16,
-    color: "#666",
-    fontWeight: "600",
-  },
-  successViewButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: "#27ae60",
-    alignItems: "center",
-  },
-  successViewText: {
-    fontSize: 16,
-    color: "#fff",
-    fontWeight: "bold",
   },
   chatIconContainer: { 
     padding: 8, 

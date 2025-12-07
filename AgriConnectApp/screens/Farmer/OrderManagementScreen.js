@@ -28,6 +28,15 @@ const OrderManagementScreen = ({ navigation, route }) => {
 
   const initialTab = route.params?.initialTab;
 
+  const getImageSource = (item) => {
+    if (item.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item.imageUrl) {
+      return { uri: item.imageUrl };
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = firestore()
       .collection("orders")
@@ -203,11 +212,7 @@ const OrderManagementScreen = ({ navigation, route }) => {
             ]}
           >
             <Image
-              source={{
-                uri:
-                  product.imageUrl ||
-                  "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
-              }}
+              source={getImageSource(product)}
               style={styles.productImage}
               resizeMode="cover"
             />

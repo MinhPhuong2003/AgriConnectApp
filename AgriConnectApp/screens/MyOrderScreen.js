@@ -123,13 +123,21 @@ const MyOrderScreen = ({ navigation, route }) => {
     }
   };
 
+  const getImageSource = (item) => {
+    if (item.imageBase64) {
+      return { uri: item.imageBase64 };
+    }
+    if (item.imageUrl) {
+      return { uri: item.imageUrl };
+    }
+  };
+
   const handleBuyAgain = async (order) => {
     const uid = auth().currentUser?.uid;
     if (!uid) {
       navigation.navigate("Cart");
       return;
     }
-
     try {
       const cartRef = firestore().collection("carts").doc(uid);
       const orderItemIds = order.items.map(item => item.id);
@@ -137,13 +145,13 @@ const MyOrderScreen = ({ navigation, route }) => {
       const newItems = order.items.map((item) => ({
         id: item.id,
         name: item.name || "Sản phẩm",
-        imageUrl: item.imageUrl || "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
+        imageBase64: item.imageBase64 || null,
+        imageUrl: item.imageBase64 ? null : (item.imageUrl || null),
         price: item.price || 0,
         quantity: item.quantity || 1,
         variant: item.variant || null,
         selected: true,
       })).filter(item => item.id);
-
       await firestore().runTransaction(async (transaction) => {
         const cartDoc = await transaction.get(cartRef);
         let items = [];
@@ -158,6 +166,10 @@ const MyOrderScreen = ({ navigation, route }) => {
           if (existing) {
             existing.quantity += newItem.quantity;
             existing.selected = true;
+            if (newItem.imageBase64) {
+              existingItems[existingIndex].imageBase64 = newItem.imageBase64;
+              existingItems[existingIndex].imageUrl = null;
+            }
           } else {
             items.push(newItem);
           }
@@ -278,11 +290,7 @@ const MyOrderScreen = ({ navigation, route }) => {
             ]}
           >
             <Image
-              source={{
-                uri:
-                  product.imageUrl ||
-                  "https://via.placeholder.com/60/f0f0f0/cccccc?text=No+Img",
-              }}
+              source={getImageSource(product)}
               style={styles.productImage}
               resizeMode="cover"
             />
@@ -334,7 +342,6 @@ const MyOrderScreen = ({ navigation, route }) => {
           </View>
         </View>
 
-        {/* === PHẦN NÚT HÀNH ĐỘNG ĐÃ ĐƯỢC CẬP NHẬT HOÀN CHỈNH === */}
         <View style={styles.actionButtons}>
           {isPending && (
             <>
@@ -371,10 +378,8 @@ const MyOrderScreen = ({ navigation, route }) => {
             </TouchableOpacity>
           )}
 
-          {/* ĐÃ GIAO */}
           {isShipped && (
             <>
-              {/* Chưa đánh giá → hiện nút Viết đánh giá */}
               {!isReviewed && (
                 <TouchableOpacity
                   style={styles.reviewBtn}
@@ -387,7 +392,6 @@ const MyOrderScreen = ({ navigation, route }) => {
                 </TouchableOpacity>
               )}
 
-              {/* Đã đánh giá → hiện "Đã đánh giá" với tick xanh */}
               {isReviewed && (
                 <View style={styles.reviewedBtn}>
                   <Icon name="checkmark-circle" size={18} color="#27ae60" />
@@ -395,7 +399,6 @@ const MyOrderScreen = ({ navigation, route }) => {
                 </View>
               )}
 
-              {/* Nút Mua lại luôn hiện khi đã giao */}
               <TouchableOpacity
                 style={styles.buyAgainBtn}
                 onPress={(e) => {
@@ -670,7 +673,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   buyAgainText: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  // 2 STYLE MỚI CHO "ĐÃ ĐÁNH GIÁ"
   reviewedBtn: {
     flexDirection: "row",
     alignItems: "center",
@@ -687,7 +689,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 6,
   },
-
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
