@@ -127,7 +127,6 @@ const ProductDetailScreen = ({ route, navigation }) => {
           });
         });
 
-        // Lấy thông tin người dùng (tên + avatar)
         let userMap = {};
         if (userIds.size > 0) {
           const userSnap = await firestore()
@@ -168,36 +167,53 @@ const ProductDetailScreen = ({ route, navigation }) => {
   const addToCart = async (product) => {
     const user = auth().currentUser;
     if (!user) {
-      alert("Vui lòng đăng nhập để thêm vào giỏ hàng!");
+      Alert.alert("Thông báo", "Vui lòng đăng nhập để thêm vào giỏ hàng!");
       return;
     }
 
     try {
       const cartRef = firestore().collection("carts").doc(user.uid);
+
       await firestore().runTransaction(async (transaction) => {
         const cartDoc = await transaction.get(cartRef);
-        let items = cartDoc.exists ? cartDoc.data().items || [] : [];
+        let cartItems = cartDoc.exists ? cartDoc.data().items || [] : [];
+        const existingIndex = cartItems.findIndex((item) => item.id === product.id);
+        const discountedPrice = Math.round(product.price * (1 - (product.discount || 0) / 100));
+        const imageToUse = product.imageBase64 || product.imageUrl || PLACEHOLDER;
+        const cartItem = {
+          id: product.id,
+          name: product.name,
+          price: discountedPrice,
+          originalPrice: product.price,
+          discount: product.discount || 0,
+          imageBase64: product.imageBase64 || null,
+          imageUrl: product.imageBase64 ? null : imageToUse,
+          quantity: 1,
+          sellerId: product.sellerId || product.farmerId || "unknown",
+          farmerName: product.farmerName || product.sellerName || "Nông dân",
+          farmerAvatarUrl: product.farmerAvatarUrl || product.sellerAvatarUrl || null,
+        };
 
-        const existingIndex = items.findIndex((i) => i.id === product.id);
         if (existingIndex >= 0) {
-          items[existingIndex].quantity += 1;
+          cartItems[existingIndex].quantity += 1;
+          cartItems[existingIndex].imageBase64 = cartItem.imageBase64;
+          cartItems[existingIndex].imageUrl = cartItem.imageUrl;
+          cartItems[existingIndex].price = discountedPrice;
         } else {
-          items.push({
-            id: product.id,
-            name: product.name,
-            price: Math.round(product.price * (1 - (product.discount || 0) / 100)),
-            originalPrice: product.price,
-            discount: product.discount || 0,
-            imageUrl: product.imageUrl || PLACEHOLDER,
-            quantity: 1,
-            sellerId: product.sellerId,
-          });
+          cartItems.push(cartItem);
         }
-        transaction.set(cartRef, { items }, { merge: true });
+
+        transaction.set(cartRef, { 
+          items: cartItems, 
+          updatedAt: firestore.FieldValue.serverTimestamp() 
+        }, { merge: true });
       });
-    } catch (err) {
-      console.error(err);
-      alert("Lỗi thêm vào giỏ");
+
+      setCartCount(prev => prev + 1);
+
+    } catch (error) {
+      console.error("Lỗi thêm vào giỏ hàng:", error);
+      Alert.alert("Lỗi", "Không thể thêm vào giỏ hàng. Vui lòng thử lại!");
     }
   };
 
@@ -221,11 +237,11 @@ const ProductDetailScreen = ({ route, navigation }) => {
     setFinalSearchQuery("");
   };
 
-  const filteredProducts = allProducts.filter((p) =>
-    finalSearchQuery
-      ? (p.name || "").toLowerCase().includes(finalSearchQuery.toLowerCase())
-      : true
-  );
+  const filteredProducts = finalSearchQuery
+  ? allProducts.filter((p) =>
+      (p.name || "").toLowerCase().includes(finalSearchQuery.toLowerCase())
+    )
+  : [];
 
   // === RENDER ĐÁNH GIÁ ===
   const renderReview = ({ item }) => (
@@ -400,26 +416,53 @@ const ProductDetailScreen = ({ route, navigation }) => {
       {/* NỘI DUNG */}
       {isSearchMode ? (
         <FlatList
+          key="SEARCH_MODE_2_COLUMNS"
           data={filteredProducts}
-          keyExtractor={(i) => i.id}
+          renderItem={renderResultItem}
+          keyExtractor={(item) => item.id}
           numColumns={2}
           columnWrapperStyle={{ justifyContent: "space-between", paddingHorizontal: 16 }}
-          renderItem={renderResultItem}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingVertical: 20, paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
           ListEmptyComponent={
-            <View style={styles.emptyBox}>
-              <Icon name="search-off" size={60} color="#ccc" />
-              <Text style={styles.emptyText}>Không tìm thấy sản phẩm</Text>
-            </View>
+            finalSearchQuery ? (
+              // ĐÃ tìm kiếm nhưng không có kết quả
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", marginTop: 80 }}>
+                <Icon name="search-off" size={80} color="#ccc" />
+                <Text style={{ marginTop: 20, fontSize: 16, color: "#999" }}>
+                  Không tìm thấy sản phẩm cho
+                </Text>
+                <Text style={{ fontSize: 16, color: "#666", marginTop: 4 }}>
+                  "{finalSearchQuery}"
+                </Text>
+              </View>
+            ) : (
+              // Chưa nhập gì → hướng dẫn người dùng
+              <View style={{ flex: 1, justifyContent: "center", alignItems: "center", marginTop: 80 }}>
+                <Icon name="search" size={80} color="#ccc" />
+                <Text style={{ marginTop: 20, fontSize: 17, color: "#999", textAlign: "center" }}>
+                  Nhập tên sản phẩm{'\n'}để tìm kiếm
+                </Text>
+              </View>
+            )
           }
         />
       ) : (
+        // CHẾ ĐỘ CHI TIẾT + ĐÁNH GIÁ – 1 CỘT
         <FlatList
+          key="DETAIL_MODE_1_COLUMN"    // key khác nhau → buộc remount
           data={reviews}
           renderItem={renderReview}
-          keyExtractor={(i) => i.id}
+          keyExtractor={(item) => item.id}
           ListHeaderComponent={ListHeader}
-          ListEmptyComponent={!loadingReviews && <Text style={{ textAlign: "center", margin: 30, color: "#999" }}>Chưa có đánh giá nào</Text>}
+          ListEmptyComponent={
+            !loadingReviews && reviews.length === 0 ? (
+              <View style={{ padding: 40, alignItems: "center" }}>
+                <Icon name="chatbubbles-outline" size={60} color="#ddd" />
+                <Text style={{ marginTop: 12, color: "#999" }}>Chưa có đánh giá nào</Text>
+              </View>
+            ) : null
+          }
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
         />

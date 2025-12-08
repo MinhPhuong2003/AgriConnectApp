@@ -210,7 +210,7 @@ const NotificationsScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={{ width: 30 }} />
-        <Text style={styles.headerTitle}>Thông báo</Text>
+        <Text style={styles.headerTitle}>THÔNG BÁO</Text>
         <View style={{ width: 30 }} />
       </View>
 
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#f8f9fa" },
   loggedOutContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8f9fa" },
   loggedOutText: { marginTop: 16, fontSize: 16, color: "#999" },
-  header: { backgroundColor: "#27ae60", flexDirection: "row", alignItems: "center", justifyContent: "center", paddingTop: 40, paddingBottom: 10 },
+  header: { backgroundColor: "#27ae60", flexDirection: "row", alignItems: "center", justifyContent: "center", paddingTop: 40, paddingBottom: 5 },
   headerTitle: { fontSize: 20, fontWeight: "bold", color: "#fff" },
   center: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#f8f9fa" },
   sectionHeader: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#f8f9fa" },

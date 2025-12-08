@@ -20,7 +20,6 @@ import WritingReviewScreen from "../screens/WritingReviewScreen";
 import MyOrderScreen from "../screens/MyOrderScreen";
 import ReviewScreen from "../screens/ReviewScreen";
 import NotificationsScreen from "../screens/NotificationsScreen";
-import EditProfileScreen from "../screens/EditProfileScreen";
 import HomeFarmerTabs from "./HomeFarmerTabs";
 import HomeBuyerTabs from "./HomeBuyerTabs";
 import ProductDetailScreen from "../screens/Farmer/ProductDetailScreen";
@@ -29,6 +28,10 @@ import PickupLocations from "../screens/Buyer/PickupLocations";
 import MapPickerScreen from "../screens/Buyer/MapPickerScreen";
 import AddressSearchScreen from "../screens/Buyer/AddressSearchScreen";
 import SearchResults from "../screens/Buyer/SearchResults";
+import EditProfileScreen from "../screens/EditProfileScreen";
+import ChangePasswordScreen from "../features/auth/ChangePasswordScreen";
+import VerifyEmailScreen from "../features/auth/VerifyEmailScreen";
+
 // Đặt Trước
 import CartPreOrderScreen from "../screens/Buyer/CartPreOrderScreen";
 import BuyerPreOrderDetailScreen from "../screens/Buyer/BuyerPreOrderDetailScreen";
@@ -80,6 +83,8 @@ export default function AppNavigator() {
         <Stack.Screen name="MapPicker" component={MapPickerScreen} options={{ headerShown: false }} />
         <Stack.Screen name="AddressSearch" component={AddressSearchScreen} options={{ headerShown: false }} />
         <Stack.Screen name="SearchResult" component={SearchResults} options={{ headerShown: false }} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} options={{ headerShown: false }} />
         {/* === Người Mua Đặt Trước === */}
         <Stack.Screen name="BuyerPreOrderDetail" component={BuyerPreOrderDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CartPreOrder" component={CartPreOrderScreen} options={{ headerShown: false }} />

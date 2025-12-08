@@ -164,7 +164,7 @@ const EditProfileScreen = ({ navigation }) => {
       {
         mediaType: "photo",
         quality: 0.8,
-        includeBase64: true,        // BẬT DÒNG NÀY
+        includeBase64: true,
       },
       (response) => {
         if (response.didCancel || !response.assets?.[0]) return;
@@ -177,8 +177,8 @@ const EditProfileScreen = ({ navigation }) => {
 
         setUserData((prev) => ({
           ...prev,
-          photoURL: uri,         // giữ URI để hiển thị tạm
-          photoBase64: base64,   // lưu base64 thật
+          photoURL: uri,
+          photoBase64: base64,
         }));
       }
     );
@@ -213,7 +213,7 @@ const EditProfileScreen = ({ navigation }) => {
         setUserData(updatedDoc.data());
       }
       Alert.alert(
-        "✅ Thành công",
+        "Thành công",
         "Cập nhật hồ sơ thành công!",
         [{ text: "OK" }],
         { cancelable: false }

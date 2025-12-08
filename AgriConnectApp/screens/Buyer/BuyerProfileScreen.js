@@ -8,6 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
+  Pressable,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
@@ -27,63 +29,51 @@ const BuyerProfileScreen = ({ navigation }) => {
   const [shippingOrders, setShippingOrders] = useState([]);
   const [unreviewedOrdersCount, setUnreviewedOrdersCount] = useState(0);
 
+  const [settingsVisible, setSettingsVisible] = useState(false);
+
   useEffect(() => {
     const uid = auth().currentUser?.uid;
-    if (!uid) return;
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
 
-    const unsubscribeUser = firestore()
+    const unsubUser = firestore()
       .collection("users")
       .doc(uid)
-      .onSnapshot(
-        (doc) => {
-          if (doc.exists) setUserData(doc.data());
-          setLoading(false);
-        },
-        (error) => {
-          console.error("Lỗi tải dữ liệu user:", error);
-          setLoading(false);
-        }
-      );
+      .onSnapshot((doc) => {
+        if (doc.exists) setUserData(doc.data());
+        setLoading(false);
+      });
 
-    const unsubscribeOrders = firestore()
+    const unsubOrders = firestore()
       .collection("orders")
       .where("userId", "==", uid)
-      .onSnapshot(
-        (snapshot) => {
-          const pending = [];
-          const confirmed = [];
-          const shipping = [];
-          let unreviewedCount = 0;
+      .onSnapshot((snapshot) => {
+        const pending = [];
+        const confirmed = [];
+        const shipping = [];
+        let unreviewed = 0;
 
-          snapshot.forEach((doc) => {
-            const order = { id: doc.id, ...doc.data() };
+        snapshot.forEach((doc) => {
+          const order = { id: doc.id, ...doc.data() };
+          if (order.status === "pending") pending.push(order);
+          else if (order.status === "confirmed") confirmed.push(order);
+          else if (order.status === "shipping" || order.status === "delivered") {
+            shipping.push(order);
+            if (!order.reviewed) unreviewed++;
+          }
+        });
 
-            if (order.status === "shipping" || order.status === "delivered") {
-              shipping.push(order);
-              if (!order.reviewed) {
-                unreviewedCount++;
-              }
-            } else if (order.status === "pending") {
-              pending.push(order);
-            } else if (order.status === "confirmed") {
-              confirmed.push(order);
-            }
-          });
-
-          setPendingOrders(pending);
-          setConfirmedOrders(confirmed);
-          setShippingOrders(shipping);
-          setUnreviewedOrdersCount(unreviewedCount);
-        },
-        (error) => {
-          console.error("Lỗi tải đơn hàng:", error);
-          Alert.alert("Lỗi", "Không thể tải đơn hàng.");
-        }
-      );
+        setPendingOrders(pending);
+        setConfirmedOrders(confirmed);
+        setShippingOrders(shipping);
+        setUnreviewedOrdersCount(unreviewed);
+      });
 
     return () => {
-      unsubscribeUser();
-      unsubscribeOrders();
+      unsubUser();
+      unsubOrders();
     };
   }, []);
 
@@ -91,7 +81,7 @@ const BuyerProfileScreen = ({ navigation }) => {
     const result = await launchImageLibrary({
       mediaType: "photo",
       quality: 0.8,
-      includeBase64: true, // Quan trọng: bật để lấy base64
+      includeBase64: true,
     });
 
     if (result.didCancel || !result.assets?.[0]) return;
@@ -105,42 +95,44 @@ const BuyerProfileScreen = ({ navigation }) => {
     try {
       setUpdating(true);
       const uid = auth().currentUser.uid;
-
       await firestore()
         .collection("users")
         .doc(uid)
         .update({
-          photoURL: imageUri,         // giữ lại URI để dùng khi cần
-          photoBase64: imageBase64,   // lưu base64 để hiển thị nhanh và offline
+          photoURL: imageUri,
+          photoBase64: imageBase64,
         });
 
-      // Cập nhật ngay state để UI phản ánh tức thì
       setUserData((prev) => ({
         ...prev,
         photoURL: imageUri,
         photoBase64: imageBase64,
       }));
     } catch (error) {
-      console.error("Lỗi cập nhật ảnh đại diện:", error);
-      Alert.alert("Lỗi", "Cập nhật thất bại", "Không thể thay đổi ảnh đại diện.");
+      Alert.alert("Lỗi", "Không thể cập nhật ảnh đại diện");
     } finally {
       setUpdating(false);
     }
   };
 
-  const handleLogout = async () => {
-    try {
-      await auth().signOut();
-      navigation.replace("AuthFlow");
-    } catch (error) {
-      console.error("Lỗi khi đăng xuất:", error);
-    }
+  const handleLogout = () => {
+    Alert.alert("Đăng xuất", "Bạn có chắc muốn đăng xuất không?", [
+      { text: "Hủy", style: "cancel" },
+      {
+        text: "Đăng xuất",
+        style: "destructive",
+        onPress: () => {
+          auth().signOut();
+          navigation.replace("AuthFlow");
+        },
+      },
+    ]);
   };
 
   if (loading) {
     return (
       <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#2e7d32" />
+        <ActivityIndicator size="large" color="#27ae60" />
       </View>
     );
   }
@@ -148,159 +140,173 @@ const BuyerProfileScreen = ({ navigation }) => {
   if (!userData) {
     return (
       <View style={styles.container}>
-        <Text style={{ textAlign: "center", marginTop: 30 }}>
-          Không tìm thấy dữ liệu người dùng.
+        <Text style={{ textAlign: "center", marginTop: 50 }}>
+          Không tải được thông tin người dùng
         </Text>
       </View>
     );
   }
 
   return (
-    <ScrollView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <View style={{ width: 30 }} />
-        </TouchableOpacity>
-        <Text style={styles.title}>Hồ sơ của tôi</Text>
-        <TouchableOpacity onPress={() => navigation.navigate("Settings")}>
-          <Icon name="settings-outline" size={24} color="#fff" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Avatar */}
-      <View style={styles.avatarContainer}>
-        <TouchableOpacity onPress={handleChangeAvatar} disabled={updating}>
-          <Image
-            source={{ 
-              uri: userData.photoBase64 || userData.photoURL || DEFAULT_AVATAR 
-            }}
-            style={styles.avatar}
-            onError={(e) => console.log("Lỗi tải avatar:", e.nativeEvent.error)} // (tùy chọn)
-          />
-          <View style={styles.cameraIcon}>
-            <Icon name="camera-outline" size={20} color="#fff" />
+    <>
+      <View style={styles.container}>
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={{ width: 30 }} />
+            <Text style={styles.title}>HỒ SƠ CỦA TÔI</Text>
+            <TouchableOpacity onPress={() => setSettingsVisible(true)}>
+              <Icon name="settings-outline" size={26} color="#fff" />
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-        <Text style={styles.name}>{userData.name || "Người dùng"}</Text>
-        <Text style={styles.email}>{userData.email}</Text>
-        {userData.verified && (
-          <View style={styles.verifiedBadge}>
-            <Icon name="checkmark-circle" size={16} color="#fff" />
-            <Text style={styles.verifiedText}>Đã xác minh</Text>
+
+          {/* Avatar */}
+          <View style={styles.avatarContainer}>
+            <TouchableOpacity onPress={handleChangeAvatar} disabled={updating}>
+              <Image
+                source={{
+                  uri: userData.photoBase64 || userData.photoURL || DEFAULT_AVATAR,
+                }}
+                style={styles.avatar}
+              />
+              <View style={styles.cameraIcon}>
+                <Icon name="camera-outline" size={20} color="#fff" />
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.name}>{userData.name || "Người dùng"}</Text>
+            <Text style={styles.email}>{userData.email}</Text>
+            {userData.verified && (
+              <View style={styles.verifiedBadge}>
+                <Icon name="checkmark-circle" size={16} color="#fff" />
+                <Text style={styles.verifiedText}>Đã xác minh</Text>
+              </View>
+            )}
           </View>
-        )}
+
+          {/* Thông tin */}
+          <View style={styles.infoBox}>
+            <View style={styles.infoRow}>
+              <Icon name="call-outline" size={20} color="#27ae60" />
+              <Text style={styles.infoText}>
+                Số điện thoại: {userData.phone || "Chưa cập nhật"}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Icon name="location-outline" size={20} color="#27ae60" />
+              <Text style={styles.infoText}>
+                Địa chỉ: {userData.address || "Chưa cập nhật"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Trạng thái đơn hàng */}
+          <View style={styles.orderStatusContainer}>
+            <TouchableOpacity
+              style={styles.statusItem}
+              onPress={() => navigation.navigate("MyOrder", { initialTab: "pending" })}
+            >
+              <Icon name="time-outline" size={24} color="#f39c12" />
+              <Text style={styles.statusText}>Chờ xác nhận ({pendingOrders.length})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.statusItem}
+              onPress={() => navigation.navigate("MyOrder", { initialTab: "confirmed" })}
+            >
+              <Icon name="cube-outline" size={24} color="#3498db" />
+              <Text style={styles.statusText}>Đang xử lý ({confirmedOrders.length})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.statusItem}
+              onPress={() => navigation.navigate("MyOrder", { initialTab: "shipping" })}
+            >
+              <Icon name="car-outline" size={24} color="#8e44ad" />
+              <Text style={styles.statusText}>Đang giao ({shippingOrders.length})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.statusItem}
+              onPress={() => navigation.navigate("ListReview")}
+            >
+              <Icon name="star-outline" size={24} color="#f1c40f" />
+              <Text style={styles.statusText}>Đánh giá ({unreviewedOrdersCount})</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Các hành động */}
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => navigation.navigate("MyOrder")}
+            >
+              <Icon name="cart-outline" size={22} color="#27ae60" />
+              <Text style={styles.actionText}>Đơn hàng của tôi</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() => navigation.navigate("MyPreOrder")}
+            >
+              <Icon name="calendar-outline" size={22} color="#27ae60" />
+              <Text style={styles.actionText}>Đơn đặt trước</Text>
+            </TouchableOpacity>
+          </View>
+
+        </ScrollView>
       </View>
 
-      {/* Info Section */}
-      <View style={styles.infoBox}>
-        <View style={styles.infoRow}>
-          <Icon name="call-outline" size={20} color="#2e7d32" />
-          <Text style={styles.infoText}>
-            Số điện thoại: {userData.phone || "Chưa có số"}
-          </Text>
-        </View>
-        <View style={styles.infoRow}>
-          <Icon name="location-outline" size={20} color="#2e7d32" />
-          <Text style={styles.infoText}>
-            Địa chỉ: {userData.address || "Chưa có địa chỉ"}
-          </Text>
-        </View>
-      </View>
-
-      {/* Order Status */}
-      <View style={styles.orderStatusContainer}>
-        <TouchableOpacity
-          style={styles.statusItem}
-          onPress={() =>
-            navigation.navigate("MyOrder", { initialTab: "pending" })
-          }
+      {/* MODAL CÀI ĐẶT – HIỆN RA TẠI CHỖ, CÓ 3 MỤC */}
+      <Modal
+        transparent
+        visible={settingsVisible}
+        animationType="fade"
+        onRequestClose={() => setSettingsVisible(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setSettingsVisible(false)}
         >
-          <Icon name="time-outline" size={24} color="#f39c12" />
-          <Text style={styles.statusText}>
-            Chờ xác nhận ({pendingOrders.length})
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.settingsDropdown}>
+            {/* Đổi mật khẩu */}
+            <TouchableOpacity
+              style={styles.dropdownItem}
+              onPress={() => {
+                setSettingsVisible(false);
+                navigation.navigate("ChangePassword");
+              }}
+            >
+              <Icon name="key-outline" size={22} color="#27ae60" />
+              <Text style={styles.dropdownText}>Đổi mật khẩu</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.statusItem}
-          onPress={() =>
-            navigation.navigate("MyOrder", { initialTab: "confirmed" })
-          }
-        >
-          <Icon name="cube-outline" size={24} color="#3498db" />
-          <Text style={styles.statusText}>
-            Đang vận chuyển ({confirmedOrders.length})
-          </Text>
-        </TouchableOpacity>
+            {/* Chỉnh sửa hồ sơ */}
+            <TouchableOpacity
+              style={styles.dropdownItem}
+              onPress={() => {
+                setSettingsVisible(false);
+                navigation.navigate("EditProfile");
+              }}
+            >
+              <Icon name="create-outline" size={22} color="#27ae60" />
+              <Text style={styles.dropdownText}>Chỉnh sửa hồ sơ</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.statusItem}
-          onPress={() =>
-            navigation.navigate("MyOrder", { initialTab: "shipping" })
-          }
-        >
-          <Icon name="car-outline" size={24} color="#8e44ad" />
-          <Text style={styles.statusText}>
-            Đã giao ({shippingOrders.length})
-          </Text>
-        </TouchableOpacity>
-
-        {/* SỬA CHỖ NÀY - HIỂN THỊ ĐÚNG SỐ ĐƠN CHƯA ĐÁNH GIÁ */}
-        <TouchableOpacity
-          style={styles.statusItem}
-          onPress={() => navigation.navigate("ListReview")}
-        >
-          <Icon name="star-outline" size={24} color="#f1c40f" />
-          <Text style={styles.statusText}>
-            Đánh giá ({unreviewedOrdersCount})
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Actions */}
-      <View style={styles.actions}>
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => navigation.navigate("MyOrder")}
-        >
-          <Icon name="cart-outline" size={22} color="#2e7d32" />
-          <Text style={styles.actionText}>Đơn hàng của tôi</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => navigation.navigate("MyPreOrder")}
-        >
-          <Icon name="calendar-outline" size={22} color="#2e7d32" />
-          <Text style={styles.actionText}>Đơn hàng đặt trước</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => navigation.navigate("MyOrder", { initialTab: "shipping" })}
-        >
-          <Icon name="receipt-outline" size={22} color="#2e7d32" />
-          <Text style={styles.actionText}>Lịch sử đơn hàng</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() => navigation.navigate("EditProfile")}
-        >
-          <Icon name="create-outline" size={22} color="#2e7d32" />
-          <Text style={styles.actionText}>Chỉnh sửa hồ sơ</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Logout */}
-      <View style={styles.logoutContainer}>
-        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
-          <Icon name="log-out-outline" size={22} color="#fff" />
-          <Text style={styles.logoutText}>Đăng xuất</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+            {/* Đăng xuất */}
+            <TouchableOpacity
+              style={[styles.dropdownItem, { borderTopWidth: 1, borderTopColor: "#eee", paddingTop: 16 }]}
+              onPress={() => {
+                setSettingsVisible(false);
+                handleLogout();
+              }}
+            >
+              <Icon name="log-out-outline" size={22} color="#e74c3c" />
+              <Text style={[styles.dropdownText, { color: "#e74c3c" }]}>Đăng xuất</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 };
 
@@ -309,116 +315,106 @@ export default BuyerProfileScreen;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
   loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+
   header: {
     backgroundColor: "#27ae60",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 10,
     paddingTop: 40,
+    paddingBottom: 5,
   },
   title: { color: "#fff", fontSize: 18, fontWeight: "bold" },
+
   avatarContainer: { alignItems: "center", marginVertical: 20 },
-  avatar: { width: 110, height: 110, borderRadius: 55, marginBottom: 10 },
+  avatar: { width: 110, height: 110, borderRadius: 55 },
   cameraIcon: {
     position: "absolute",
     bottom: 8,
     right: 8,
-    backgroundColor: "#2e7d32",
-    borderRadius: 15,
-    padding: 6,
+    backgroundColor: "#27ae60",
+    borderRadius: 20,
+    padding: 8,
   },
-  name: { fontSize: 18, fontWeight: "bold" },
-  email: { fontSize: 14, color: "#777" },
+  name: { fontSize: 20, fontWeight: "bold", marginTop: 10 },
+  email: { fontSize: 15, color: "#666" },
   verifiedBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2e7d32",
+    backgroundColor: "#27ae60",
     borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginTop: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: 8,
   },
-  verifiedText: { color: "#fff", fontSize: 12, marginLeft: 4 },
+  verifiedText: { color: "#fff", fontSize: 13, marginLeft: 6 },
+
   infoBox: {
-    backgroundColor: "#f2f2f2",
-    borderRadius: 12,
-    padding: 16,
     marginHorizontal: 16,
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 12,
     marginBottom: 20,
   },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  infoText: { marginLeft: 10, fontSize: 16, color: "#333" },
+  infoRow: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
+  infoText: { marginLeft: 12, fontSize: 16, color: "#333" },
+
   orderStatusContainer: {
     flexDirection: "row",
     justifyContent: "space-around",
     backgroundColor: "#fff",
+    marginHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 12,
-    marginHorizontal: 16,
+    elevation: 4,
     marginBottom: 20,
-    elevation: 2,
   },
-  statusItem: { alignItems: "center", width: 70 },
-  statusText: {
-    fontSize: 12,
-    color: "#555",
-    marginTop: 6,
-    textAlign: "center",
-  },
-  actions: {
-    marginHorizontal: 20,
-    marginTop: 10,
-  },
+  statusItem: { alignItems: "center", width: 80 },
+  statusText: { fontSize: 12, color: "#555", marginTop: 6, textAlign: "center" },
+
+  actions: { marginHorizontal: 20, marginTop: 10 },
   actionBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#fff",
+    padding: 16,
     borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 14,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#d6e9d8",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
+    borderColor: "#eee",
     elevation: 2,
   },
-  actionText: {
-    marginLeft: 12,
-    fontSize: 16,
-    color: "#2e7d32",
-    fontWeight: "500",
+  actionText: { marginLeft: 14, fontSize: 16, color: "#27ae60", fontWeight: "500" },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "transparent",
   },
-  logoutContainer: {
-    marginHorizontal: 20,
-    marginTop: 10,
-    marginBottom: 50,
-  },
-  logoutBtn: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#d32f2f",
-    paddingVertical: 14,
-    borderRadius: 12,
+  settingsDropdown: {
+    position: "absolute",
+    top: 50,
+    right: 16,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    elevation: 12,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    minWidth: 220,
   },
-  logoutText: {
-    color: "#fff",
-    fontWeight: "600",
-    marginLeft: 8,
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+  },
+  dropdownText: {
+    marginLeft: 14,
     fontSize: 16,
+    color: "#333",
+    fontWeight: "500",
   },
 });
