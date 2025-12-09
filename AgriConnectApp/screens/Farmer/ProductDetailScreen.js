@@ -471,9 +471,12 @@ const ProductDetailScreen = ({ route, navigation }) => {
       {/* BOTTOM BAR */}
       {!isSearchMode && (
         <View style={styles.bottomBar}>
-          <TouchableOpacity style={styles.shopBtn}>
-            <Icon name="storefront-outline" size={22} color="#666" />
-            <Text style={styles.shopText}>Cửa hàng</Text>
+          <TouchableOpacity 
+            style={styles.shopBtn}
+            onPress={() => navigation.navigate("HomeBuyer")} 
+          >
+            <Icon name="home-outline" size={22} color="#666" />
+            <Text style={styles.shopText}>Trang chủ</Text>
           </TouchableOpacity>
 
           <TouchableOpacity 

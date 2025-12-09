@@ -17,13 +17,16 @@ import firestore from "@react-native-firebase/firestore";
 import auth from "@react-native-firebase/auth";
 
 const getImageSource = (item) => {
-  if (item?.imageBase64) {
-    return { uri: item.imageBase64 };
-  }
-  if (item?.imageUrl) {
-    return { uri: item.imageUrl };
-  }
-  return { uri: "https://via.placeholder.com/80/eeeeee/999999?text=No+Img" };
+  const uri =
+    item?.photoBase64 ||
+    item?.photoURL ||
+    item?.imageBase64 ||
+    item?.imageUrl ||
+    item?.farmerAvatarUrl;
+
+  return uri
+    ? { uri }
+    : { uri: "https://via.placeholder.com/80/eeeeee/999999?text=Avatar" };
 };
 
 const WritingReviewScreen = ({ navigation, route }) => {
@@ -33,8 +36,8 @@ const WritingReviewScreen = ({ navigation, route }) => {
   const [reviews, setReviews] = useState([]);
   const [submitting, setSubmitting] = useState(false);
 
-  const canSubmit = reviews.some(farmer =>
-    farmer.farmerRating > 0 || farmer.products.some(p => p.rating > 0)
+  const canSubmit = reviews.some(
+    (farmer) => farmer.farmerRating > 0 || farmer.products.some((p) => p.rating > 0)
   );
 
   useEffect(() => {
@@ -73,6 +76,8 @@ const WritingReviewScreen = ({ navigation, route }) => {
               sellerId,
               farmerName: item.farmerName || "Đang tải tên...",
               farmerAvatarUrl: item.farmerAvatarUrl || null,
+              photoURL: null,
+              photoBase64: null,
               farmerRating: 0,
               products: [],
             };
@@ -118,9 +123,12 @@ const WritingReviewScreen = ({ navigation, route }) => {
             if (userDoc.exists) {
               const data = userDoc.data();
               groupedByFarmer[sid].farmerName = data.name || data.displayName || "Nông dân";
-              groupedByFarmer[sid].farmerAvatarUrl = data.photoURL || data.avatarUrl || null;
+              groupedByFarmer[sid].photoURL = data.photoURL || null;
+              groupedByFarmer[sid].photoBase64 = data.photoBase64 || null;
+              groupedByFarmer[sid].farmerAvatarUrl = data.photoURL || null;
             }
           } catch (e) {
+            console.error("Lỗi lấy info nông dân:", e);
             groupedByFarmer[sid].farmerName = "Nông dân";
           }
         });
@@ -129,7 +137,6 @@ const WritingReviewScreen = ({ navigation, route }) => {
 
         setReviews(Object.values(groupedByFarmer));
         setLoading(false);
-
       } catch (error) {
         console.error("Lỗi khi tải đơn hàng:", error);
         Alert.alert("Lỗi", "Không thể tải thông tin đơn hàng.");
@@ -141,16 +148,16 @@ const WritingReviewScreen = ({ navigation, route }) => {
   }, [orderId, navigation]);
 
   const handleRating = (sellerId, productId, rating, type) => {
-    setReviews((prevReviews) =>
-      prevReviews.map((farmer) =>
+    setReviews((prev) =>
+      prev.map((farmer) =>
         farmer.sellerId === sellerId
           ? {
               ...farmer,
               farmerRating: type === "farmer" ? rating : farmer.farmerRating,
-              products: farmer.products.map((product) =>
-                product.productId === productId && type === "product"
-                  ? { ...product, rating }
-                  : product
+              products: farmer.products.map((p) =>
+                p.productId === productId && type === "product"
+                  ? { ...p, rating }
+                  : p
               ),
             }
           : farmer
@@ -159,15 +166,13 @@ const WritingReviewScreen = ({ navigation, route }) => {
   };
 
   const handleComment = (sellerId, productId, comment) => {
-    setReviews((prevReviews) =>
-      prevReviews.map((farmer) =>
+    setReviews((prev) =>
+      prev.map((farmer) =>
         farmer.sellerId === sellerId
           ? {
               ...farmer,
-              products: farmer.products.map((product) =>
-                product.productId === productId
-                  ? { ...product, comment }
-                  : product
+              products: farmer.products.map((p) =>
+                p.productId === productId ? { ...p, comment } : p
               ),
             }
           : farmer
@@ -212,16 +217,20 @@ const WritingReviewScreen = ({ navigation, route }) => {
           .collection("reviews")
           .doc(review.isReviewed ? `${orderId}_${review.productId}_${user.uid}` : undefined);
 
-        batch.set(reviewRef, {
-          userId: user.uid,
-          orderId,
-          productId: review.productId,
-          sellerId: review.sellerId,
-          rating: review.rating,
-          farmerRating: review.farmerRating,
-          comment: review.comment,
-          createdAt: firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
+        batch.set(
+          reviewRef,
+          {
+            userId: user.uid,
+            orderId,
+            productId: review.productId,
+            sellerId: review.sellerId,
+            rating: review.rating,
+            farmerRating: review.farmerRating,
+            comment: review.comment,
+            createdAt: firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
 
         if (review.sellerId && review.sellerId !== "unknown") {
           const farmerRef = firestore().collection("users").doc(review.sellerId);
@@ -249,11 +258,17 @@ const WritingReviewScreen = ({ navigation, route }) => {
   const renderStarRating = (id, rating, type, onPress, disabled = false) => {
     const stars = [1, 2, 3, 4, 5];
     const ratingText =
-      rating === 5 ? "Tuyệt vời"
-      : rating === 4 ? "Tốt"
-      : rating === 3 ? "Bình thường"
-      : rating === 2 ? "Kém"
-      : rating === 1 ? "Rất kém" : "";
+      rating === 5
+        ? "Tuyệt vời"
+        : rating === 4
+        ? "Tốt"
+        : rating === 3
+        ? "Bình thường"
+        : rating === 2
+        ? "Kém"
+        : rating === 1
+        ? "Rất kém"
+        : "";
 
     return (
       <View style={styles.starContainer}>
@@ -306,8 +321,9 @@ const WritingReviewScreen = ({ navigation, route }) => {
           {reviews.map((farmer, farmerIndex) => (
             <View key={farmer.sellerId} style={styles.farmerGroup}>
               <View style={styles.farmerCard}>
+                {/* ĐÃ SỬA – HIỂN THỊ ĐÚNG ẢNH NÔNG DÂN */}
                 <Image
-                  source={getImageSource({ imageBase64: farmer.farmerAvatarUrl })}
+                  source={getImageSource(farmer)}
                   style={styles.farmerAvatar}
                   resizeMode="cover"
                 />
@@ -321,7 +337,7 @@ const WritingReviewScreen = ({ navigation, route }) => {
                   farmer.farmerRating,
                   "farmer",
                   (id, rating) => handleRating(farmer.sellerId, null, rating, "farmer"),
-                  farmer.products.some(p => p.isReviewed)
+                  farmer.products.some((p) => p.isReviewed)
                 )}
               </View>
 
@@ -359,7 +375,9 @@ const WritingReviewScreen = ({ navigation, route }) => {
                       placeholderTextColor="#aaa"
                       multiline
                       value={product.comment}
-                      onChangeText={(text) => handleComment(farmer.sellerId, product.productId, text)}
+                      onChangeText={(text) =>
+                        handleComment(farmer.sellerId, product.productId, text)
+                      }
                       maxLength={500}
                       editable={!product.isReviewed}
                     />

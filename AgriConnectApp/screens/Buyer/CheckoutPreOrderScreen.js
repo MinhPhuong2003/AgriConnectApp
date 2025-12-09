@@ -57,6 +57,33 @@ const CheckoutPreOrderScreen = ({ navigation, route }) => {
   const finalTotal = subtotal + shippingFee;
 
   const formatPrice = (price) => new Intl.NumberFormat("vi-VN").format(price) + "đ";
+  
+  const [availableQuantity, setAvailableQuantity] = useState(Infinity);
+  useEffect(() => {
+    if (!isSingleItem || !item?.id) return;
+
+    const fetchAvailableQuantity = async () => {
+      try {
+        const preOrderDoc = await firestore()
+          .collection("preOrders")
+          .doc(item.id)
+          .get();
+
+        if (preOrderDoc.exists) {
+          const data = preOrderDoc.data();
+          const limit = data.preOrderLimit || 0;
+          const current = data.preOrderCurrent || 0;
+          const remaining = limit > 0 ? Math.max(0, limit - current) : Infinity;
+          setAvailableQuantity(remaining);
+        }
+      } catch (err) {
+        console.error("Lỗi lấy tồn kho pre-order:", err);
+        setAvailableQuantity(Infinity);
+      }
+    };
+
+    fetchAvailableQuantity();
+  }, [isSingleItem, item?.id]);
 
   useEffect(() => {
     const uid = auth().currentUser?.uid;
@@ -108,69 +135,101 @@ const CheckoutPreOrderScreen = ({ navigation, route }) => {
 
   const handlePlaceOrder = async () => {
     if (!auth().currentUser) return Alert.alert("Lỗi", "Vui lòng đăng nhập!");
-    if (subtotal <= 0) return Alert.alert("Số lượng", "Giỏ hàng trống hoặc số lượng không hợp lệ!");
+    if (subtotal <= 0) return Alert.alert("Số lượng", "Vui lòng chọn số lượng!");
     if (!userData.address || userData.address === "Chưa có địa chỉ") {
       Alert.alert("Thiếu địa chỉ", "Vui lòng chọn địa chỉ giao hàng!");
       return;
     }
 
     setOrderLoading(true);
+
     try {
-      const bookingRef = firestore().collection("preOrderBookings").doc();
+      const uid = auth().currentUser.uid;
 
-      const products = cartItems.map((it) => ({
-        preOrderId: it.id,
-        cropName: it.cropName || "Không có tên",
-        imageUrl: it.image || "",
-        quantity: isSingleItem ? qty : (it.quantity || 1),
-        pricePerKg: it.price || 0,
-        subtotal: (it.price || 0) * (isSingleItem ? qty : (it.quantity || 1)),
-        sellerId: it.sellerId || "",
-        preOrderRef: firestore().collection("preOrders").doc(it.id),
-      }));
+      const result = await firestore().runTransaction(async (transaction) => {
+        const productsToBook = [];
+        let totalIncrement = 0;
+        for (const it of cartItems) {
+          const preOrderId = it.id || it.preOrderId;
+          const qtyToAdd = isSingleItem ? qty : (it.quantity || 1);
 
-      await bookingRef.set({
-        buyerId: auth().currentUser.uid,
-        buyerName: userData.name || "Khách hàng",
-        buyerPhone: userData.phone || "",
-        buyerAddress: userData.address || "Không có",
-        shippingFee,
-        shippingMethod: shippingMethod?.name || "Không chọn",
-        paymentMethod: paymentMethod?.name || "Không chọn",
-        note: note?.trim?.() || "",
-        status: "pending",
-        createdAt: firestore.FieldValue.serverTimestamp(),
-        updatedAt: firestore.FieldValue.serverTimestamp(),
-        products,
-        subtotal,
-        finalTotal,
-      });
+          const preOrderRef = firestore().collection("preOrders").doc(preOrderId);
+          const preOrderDoc = await transaction.get(preOrderRef);
 
-      const batch = firestore().batch();
-      cartItems.forEach((it) => {
-        batch.update(firestore().collection("preOrders").doc(it.id), {
-          preOrderCurrent: firestore.FieldValue.increment(it.quantity || 1),
+          if (!preOrderDoc.exists) {
+            throw new Error(`Sản phẩm ${it.cropName} không tồn tại!`);
+          }
+
+          const data = preOrderDoc.data();
+          const limit = data.preOrderLimit || 0;
+          const current = data.preOrderCurrent || 0;
+          const remaining = limit > 0 ? limit - current : Infinity;
+
+          if (remaining !== Infinity && qtyToAdd > remaining) {
+            throw new Error(
+              `Chỉ còn ${remaining}kg "${it.cropName}" có thể đặt trước. Vui lòng giảm số lượng.`
+            );
+          }
+
+          productsToBook.push({
+            preOrderId,
+            cropName: it.cropName || "Không tên",
+            imageUrl: it.image || "",
+            quantity: qtyToAdd,
+            pricePerKg: it.price || 0,
+            subtotal: (it.price || 0) * qtyToAdd,
+            sellerId: it.sellerId || "",
+            preOrderRef,
+          });
+
+          totalIncrement += qtyToAdd;
+
+          if (limit > 0) {
+            transaction.update(preOrderRef, {
+              preOrderCurrent: current + qtyToAdd,
+            });
+          }
+        }
+
+        const bookingRef = firestore().collection("preOrderBookings").doc();
+        transaction.set(bookingRef, {
+          buyerId: uid,
+          buyerName: userData.name || "Khách hàng",
+          buyerPhone: userData.phone || "",
+          buyerAddress: userData.address || "Không có",
+          shippingFee,
+          shippingMethod: shippingMethod?.name || "Không chọn",
+          paymentMethod: paymentMethod?.name || "Không chọn",
+          note: note?.trim?.() || "",
+          status: "pending",
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          updatedAt: firestore.FieldValue.serverTimestamp(),
+          products: productsToBook,
+          subtotal,
+          finalTotal,
         });
+
+        if (!isSingleItem) {
+          const cartRef = firestore()
+            .collection("users")
+            .doc(uid)
+            .collection("preOrderCart");
+
+          const cartSnapshot = await cartRef.get();
+          cartSnapshot.docs.forEach((doc) => {
+            transaction.delete(doc.ref);
+          });
+        }
+
+        return { bookingId: bookingRef.id };
       });
-      await batch.commit();
 
-      if (!isSingleItem) {
-        const cartRef = firestore()
-          .collection("users")
-          .doc(auth().currentUser.uid)
-          .collection("preOrderCart");
-        const snapshot = await cartRef.get();
-        const deleteBatch = firestore().batch();
-        snapshot.docs.forEach((doc) => deleteBatch.delete(doc.ref));
-        await deleteBatch.commit();
-      }
-
-      setLatestBookingId(bookingRef.id);
+      setLatestBookingId(result.bookingId);
       setSuccessModalVisible(true);
 
     } catch (err) {
-      console.error(err);
-      Alert.alert("Lỗi", err.message || "Không thể đặt trước. Vui lòng thử lại!");
+      console.error("Lỗi đặt trước:", err);
+      Alert.alert("Không thể đặt hàng", err.message || "Đã có lỗi xảy ra. Vui lòng thử lại.");
     } finally {
       setOrderLoading(false);
     }
@@ -224,17 +283,86 @@ const CheckoutPreOrderScreen = ({ navigation, route }) => {
         {isSingleItem && (
           <View style={styles.quantitySection}>
             <Text style={styles.sectionTitle}>Số lượng đặt trước (kg)</Text>
+            
+            {/* Hiển thị còn lại bao nhiêu kg */}
+            {availableQuantity !== Infinity && (
+              <Text style={styles.remainingText}>
+                Còn lại: {availableQuantity > 0 ? `${availableQuantity}kg` : "Hết hàng"}
+              </Text>
+            )}
+
             <View style={styles.quantityRow}>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity(Math.max(1, qty - 1).toString())}>
+              {/* Nút giảm */}
+              <TouchableOpacity
+                style={[
+                  styles.qtyBtn,
+                  parseInt(quantity) <= 1 && styles.qtyBtnDisabled
+                ]}
+                onPress={() => {
+                  const cur = parseInt(quantity) || 1;
+                  if (cur > 1) setQuantity((cur - 1).toString());
+                }}
+                disabled={parseInt(quantity) <= 1}
+              >
                 <Icon name="remove" size={22} color="#fff" />
               </TouchableOpacity>
-              <View style={styles.qtyInputWrapper}>
-                <Text style={styles.qtyText}>{quantity}</Text>
-              </View>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => setQuantity((qty + 1).toString())}>
-                <Icon name="add" size={22} color="#fff" />
+
+              {/* Ô NHẬP SỐ - CÓ THỂ CLICK VÀ GÕ TAY */}
+              <TextInput
+                style={styles.qtyInput}
+                value={quantity}
+                onChangeText={(text) => {
+                  // Chỉ cho phép số nguyên dương
+                  const num = text.replace(/[^0-9]/g, "");
+                  if (num === "" || parseInt(num) === 0) {
+                    setQuantity("1");
+                  } else if (availableQuantity !== Infinity && parseInt(num) > availableQuantity) {
+                    // Nếu nhập quá giới hạn → tự động về max
+                    setQuantity(availableQuantity.toString());
+                    Alert.alert("Giới hạn", `Chỉ còn ${availableQuantity}kg có thể đặt trước`);
+                  } else {
+                    setQuantity(num);
+                  }
+                }}
+                keyboardType="numeric"
+                textAlign="center"
+                selectTextOnFocus={true}
+                maxLength={4}
+              />
+
+              {/* Nút tăng */}
+              <TouchableOpacity
+                style={[
+                  styles.qtyBtn,
+                  availableQuantity !== Infinity && parseInt(quantity) >= availableQuantity && styles.qtyBtnDisabled
+                ]}
+                onPress={() => {
+                  const cur = parseInt(quantity) || 1;
+                  const next = cur + 1;
+                  if (availableQuantity !== Infinity && next > availableQuantity) {
+                    Alert.alert("Không thể tăng", `Chỉ còn ${availableQuantity}kg`);
+                    return;
+                  }
+                  setQuantity(next.toString());
+                }}
+                disabled={availableQuantity !== Infinity && parseInt(quantity) >= availableQuantity}
+              >
+                <Icon
+                  name="add"
+                  size={22}
+                  color={
+                    availableQuantity !== Infinity && parseInt(quantity) >= availableQuantity
+                      ? "#ccc"
+                      : "#fff"
+                  }
+                />
               </TouchableOpacity>
             </View>
+
+            {/* Cảnh báo nếu đã đạt giới hạn */}
+            {availableQuantity !== Infinity && parseInt(quantity) >= availableQuantity && availableQuantity > 0 && (
+              <Text style={styles.warningText}>Đã đạt số lượng tối đa còn lại</Text>
+            )}
           </View>
         )}
 
@@ -433,8 +561,7 @@ const styles = StyleSheet.create({
   quantitySection: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   quantityRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: 12 },
   qtyBtn: { backgroundColor: "#27ae60", width: 44, height: 44, borderRadius: 22, justifyContent: "center", alignItems: "center" },
-  qtyInputWrapper: { width: 100, height: 44, backgroundColor: "#f9f9f9", borderWidth: 1, borderColor: "#ddd", borderRadius: 12, justifyContent: "center", alignItems: "center", marginHorizontal: 20 },
-  qtyText: { fontSize: 18, fontWeight: "bold", color: "#333" },
+  
   noteSection: { backgroundColor: "#fff", padding: 16, marginTop: 8 },
   noteInput: { marginTop: 12, borderWidth: 1, borderColor: "#ddd", borderRadius: 12, paddingHorizontal: 14, paddingTop: 14, minHeight: 100, backgroundColor: "#fafafa", textAlignVertical: "top", fontSize: 14, color: "#333" },
   section: { flexDirection: "row", alignItems: "center", backgroundColor: "#fff", padding: 16, marginTop: 8 },
@@ -470,6 +597,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   placeOrderText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  remainingText: {
+    fontSize: 13,
+    color: "#e67e22",
+    fontWeight: "600",
+    textAlign: "center",
+    marginTop: 8,
+  },
+  warningText: {
+    fontSize: 12,
+    color: "#e74c3c",
+    textAlign: "center",
+    marginTop: 8,
+    fontWeight: "500",
+  },
+  qtyBtnDisabled: {
+    backgroundColor: "#ddd",
+  },
+  qtyInput: {
+    width: 100,
+    height: 44,
+    backgroundColor: "#f9f9f9",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    textAlign: "center",
+    marginHorizontal: 20,
+  },
 });
 
 export default CheckoutPreOrderScreen;

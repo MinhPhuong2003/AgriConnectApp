@@ -13,13 +13,17 @@ import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
 
 const getImageSource = (item) => {
-  if (item?.imageBase64) {
-    return { uri: item.imageBase64 };
-  }
-  if (item?.imageUrl) {
-    return { uri: item.imageUrl };
-  }
-  return { uri: "https://via.placeholder.com/80/eeeeee/999999?text=No+Image" };
+  const uri =
+    item?.photoBase64 ||
+    item?.photoURL ||
+    item?.imageBase64 ||
+    item?.imageUrl ||
+    item?.farmerAvatarUrl ||
+    item?.avatar;
+
+  return uri
+    ? { uri }
+    : { uri: "https://via.placeholder.com/80/eeeeee/999999?text=You" };
 };
 
 const ReviewScreen = ({ navigation }) => {
@@ -28,7 +32,8 @@ const ReviewScreen = ({ navigation }) => {
   const [reviewedOrders, setReviewedOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState("Bạn");
-  const [userAvatar, setUserAvatar] = useState(null);
+  const [userPhotoURL, setUserPhotoURL] = useState(null);
+  const [userPhotoBase64, setUserPhotoBase64] = useState(null);
 
   const uid = auth().currentUser?.uid;
 
@@ -41,7 +46,8 @@ const ReviewScreen = ({ navigation }) => {
         if (doc.exists) {
           const data = doc.data();
           setUserName(data.displayName || data.name || "Bạn");
-          setUserAvatar(data.photoURL || data.avatar || null);
+          setUserPhotoURL(data.photoURL || null);
+          setUserPhotoBase64(data.photoBase64 || null);
         }
       } catch (error) {
         console.log("Lỗi lấy thông tin người dùng:", error);
@@ -271,9 +277,14 @@ const ReviewScreen = ({ navigation }) => {
                 {product.review ? (
                   <View style={styles.reviewContainer}>
                     <View style={styles.reviewerInfo}>
+                      {/* ĐÃ SỬA – HIỂN THỊ ĐÚNG ẢNH NGƯỜI DÙNG */}
                       <Image
-                        source={getImageSource({ imageBase64: userAvatar })}
+                        source={getImageSource({
+                          photoBase64: userPhotoBase64,
+                          photoURL: userPhotoURL,
+                        })}
                         style={styles.reviewerAvatar}
+                        resizeMode="cover"
                       />
                       <View>
                         <Text style={styles.reviewerName}>{userName}</Text>

@@ -114,36 +114,67 @@ const BuyerPreOrderScreen = ({ navigation }) => {
       return;
     }
 
-    if (item.isSoldOut) {
-      Alert.alert("Hết chỗ", "Sản phẩm này đã hết suất đặt trước");
-      return;
-    }
-
     try {
-      await firestore()
+      // 1. Lấy dữ liệu tồn kho thực tế
+      const preOrderDoc = await firestore()
+        .collection("preOrders")
+        .doc(item.id)
+        .get();
+
+      if (!preOrderDoc.exists) {
+        Alert.alert("Lỗi", "Sản phẩm không tồn tại");
+        return;
+      }
+
+      const data = preOrderDoc.data();
+      const limit = data.preOrderLimit || 0;
+      const currentBooked = data.preOrderCurrent || 0;
+      const remaining = limit > 0 ? limit - currentBooked : Infinity;
+
+      // 2. Kiểm tra số lượng hiện có trong giỏ của user
+      const cartDocRef = firestore()
         .collection("users")
         .doc(user.uid)
         .collection("preOrderCart")
-        .doc(item.id)
-        .set(
-          {
-            cropName: item.cropName,
-            price: item.price,
-            image: item.image,
-            region: item.region || "Chưa xác định",
-            expectedHarvestDate: item.expectedHarvestDate,
-            preOrderEndDate: item.preOrderEndDate,
-            preOrderId: item.id,
-            quantity: firestore.FieldValue.increment(1),
-          },
-          { merge: true }
+        .doc(item.id);
+
+      const cartDoc = await cartDocRef.get();
+
+      // Dòng này là key: PHẢI kiểm tra cả exists và data() không undefined
+      const cartData = cartDoc.exists ? cartDoc.data() : null;
+      const currentInCart = cartData ? (cartData.quantity || 0) : 0;
+
+      // 3. Kiểm tra vượt giới hạn chưa
+      if (remaining !== Infinity && currentInCart + 1 > remaining) {
+        Alert.alert(
+          "Không thể đặt thêm",
+          `Chỉ còn ${remaining}kg có thể đặt trước. Bạn đã đặt ${currentInCart}kg trong giỏ.`
         );
+        return;
+      }
+
+      // 4. Thêm vào giỏ (dùng increment)
+      await cartDocRef.set(
+        {
+          cropName: item.cropName,
+          price: item.price,
+          image: item.image,
+          region: item.region || "Chưa xác định",
+          expectedHarvestDate: item.expectedHarvestDate,
+          preOrderEndDate: item.preOrderEndDate,
+          preOrderId: item.id,
+          quantity: firestore.FieldValue.increment(1),
+        },
+        { merge: true }
+      );
+
+      // Alert.success("Đã thêm vào giỏ hàng!");
     } catch (error) {
       console.error("Lỗi thêm vào giỏ:", error);
-      Alert.alert("Lỗi", "Không thể thêm vào giỏ hàng");
+      Alert.alert("Lỗi", "Không thể thêm vào giỏ hàng. Vui lòng thử lại.");
     }
   };
-
+  
   const formatDate = (date) => {
     if (!date) return "";
     return date.toLocaleDateString("vi-VN", { month: "short", year: "numeric" });
@@ -187,13 +218,6 @@ const BuyerPreOrderScreen = ({ navigation }) => {
       <View style={styles.content}>
         <View style={styles.headerRow}>
           <Text style={styles.cropName}>{item.cropName}</Text>
-          {item.isSoldOut ? (
-            <View style={styles.soldOutBadge}>
-              <Text style={styles.soldOutText}>Hết chỗ</Text>
-            </View>
-          ) : (
-            <Text style={styles.timeLeft}>{getTimeLeft(item.preOrderEndDate)}</Text>
-          )}
         </View>
 
         <View style={styles.infoRow}>
@@ -416,9 +440,6 @@ const styles = StyleSheet.create({
   content: { padding: 16 },
   headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   cropName: { fontSize: 18, fontWeight: "bold", color: "#2d3436", flex: 1 },
-  timeLeft: { fontSize: 13, color: "#e67e22", fontWeight: "600" },
-  soldOutBadge: { backgroundColor: "#e74c3c", paddingHorizontal: 12, paddingVertical: 66, borderRadius: 20 },
-  soldOutText: { color: "#fff", fontWeight: "bold", fontSize: 12 },
   infoRow: { flexDirection: "row", alignItems: "center", marginVertical: 6, gap: 8 },
   label: { fontSize: 14, color: "#636e72", minWidth: 100 },
   value: { fontSize: 14, color: "#2d3436", fontWeight: "600", flex: 1, textAlign: "right" },

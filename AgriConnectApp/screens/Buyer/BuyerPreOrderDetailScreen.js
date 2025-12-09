@@ -187,7 +187,7 @@ const BuyerPreOrderDetailScreen = ({ route, navigation }) => {
                     />
                   </View>
                   <Text style={styles.remaining}>
-                    {isSoldOut ? "ĐÃ HẾT CHỖ" : `Còn lại ${item.remaining}kg`}
+                    {isSoldOut ? "ĐÃ HẾT HÀNG" : `Còn lại ${item.remaining}kg`}
                   </Text>
                 </View>
               ) : (
@@ -212,7 +212,7 @@ const BuyerPreOrderDetailScreen = ({ route, navigation }) => {
             >
               <Icon name="cart-outline" size={22} color="#fff" />
               <Text style={styles.checkoutButtonText}>
-                {isSoldOut ? "Hết chỗ" : "ĐẶT TRƯỚC NGAY"}
+                {isSoldOut ? "HẾT HÀNG" : "ĐẶT TRƯỚC NGAY"}
               </Text>
             </TouchableOpacity>
           </View>

@@ -9,6 +9,7 @@ import {
   Alert,
   SafeAreaView,
   StatusBar,
+  TextInput,
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import firestore from "@react-native-firebase/firestore";
@@ -31,23 +32,43 @@ const CartPreOrderScreen = ({ navigation }) => {
       .collection("users")
       .doc(user.uid)
       .collection("preOrderCart")
-      .onSnapshot((snapshot) => {
+      .onSnapshot(async (snapshot) => {
         const items = [];
         let total = 0;
-
-        snapshot.forEach((doc) => {
+        for (const doc of snapshot.docs) {
           const data = doc.data();
-          const itemTotal = (data.price || 0) * (data.quantity || 1);
+          let availableQuantity = 99999;
+          if (data.preOrderId) {
+            try {
+              const preOrderDoc = await firestore()
+                .collection("preOrders")
+                .doc(data.preOrderId)
+                .get();
+
+              if (preOrderDoc.exists) {
+                const p = preOrderDoc.data();
+                const limit = p.preOrderLimit || 0;
+                const current = p.preOrderCurrent || 0;
+                availableQuantity = Math.max(0, limit - current);
+              }
+            } catch (e) {
+              console.log("Lỗi lấy tồn kho pre-order:", e);
+            }
+          }
+
+          const quantity = data.quantity || 1;
+          const itemTotal = (data.price || 0) * quantity;
           total += itemTotal;
 
           items.push({
             id: doc.id,
             ...data,
+            availableQuantity,
             region: data.region || "Chưa xác định",
             expectedHarvestDate: data.expectedHarvestDate,
             preOrderEndDate: data.preOrderEndDate,
           });
-        });
+        }
 
         setCartItems(items);
         setTotalPrice(total);
@@ -55,7 +76,7 @@ const CartPreOrderScreen = ({ navigation }) => {
       });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [user, navigation]);
 
   const updateQuantity = async (itemId, newQuantity) => {
     if (newQuantity < 1) return;
@@ -125,31 +146,94 @@ const CartPreOrderScreen = ({ navigation }) => {
           </Text>
         </View>
 
-        {/* Tăng giảm số lượng */}
-        <View style={styles.quantityRow}>
-          <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => updateQuantity(item.id, (item.quantity || 1) - 1)}
-          >
-            <Icon name="remove" size={18} color="#666" />
-          </TouchableOpacity>
+      <View style={styles.quantityRow}>
+        <TouchableOpacity
+          style={styles.qtyBtn}
+          onPress={() => updateQuantity(item.id, Math.max(1, (item.quantity || 1) - 1))}
+        >
+          <Icon name="remove" size={18} color="#666" />
+        </TouchableOpacity>
 
-          <Text style={styles.quantity}>{item.quantity || 1}</Text>
+        <TextInput
+          key={item.id + "-qty"}
+          style={styles.quantityInput}
+          defaultValue={String(item.quantity || 1)}
+          keyboardType="number-pad"
+          selectTextOnFocus={true}
+          onChangeText={(text) => {
+            let num = parseInt(text) || 1;
+            if (num < 1) num = 1;
+            if (item.availableQuantity > 0 && num > item.availableQuantity) {
+              num = item.availableQuantity;
+              if (!item._justLimited) {
+                item._justLimited = true;
+                setTimeout(() => {
+                  Alert.alert(
+                    "Không thể đặt thêm",
+                    `Chỉ còn ${item.availableQuantity}kg có thể đặt trước.`,
+                    [{ text: "OK", onPress: () => delete item._justLimited }]
+                  );
+                }, 300);
+              }
+            } else {
+              item._justLimited = false;
+            }
 
-          <TouchableOpacity
-            style={styles.qtyBtn}
-            onPress={() => updateQuantity(item.id, (item.quantity || 1) + 1)}
-          >
-            <Icon name="add" size={18} color="#27ae60" />
-          </TouchableOpacity>
+            updateQuantity(item.id, num);
+          }}
+          onEndEditing={(e) => {
+            let num = parseInt(e.nativeEvent.text) || 1;
+            if (num < 1) num = 1;
 
-          <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={() => removeItem(item.id)}
-          >
-            <Icon name="trash-outline" size={22} color="#e74c3c" />
-          </TouchableOpacity>
-        </View>
+            if (item.availableQuantity > 0 && num > item.availableQuantity) {
+              num = item.availableQuantity;
+              if (!item._justLimited) {
+                Alert.alert(
+                  "Không thể đặt thêm",
+                  `Chỉ còn ${item.availableQuantity}kg có thể đặt trước.`,
+                  [{ text: "OK" }]
+                );
+              }
+            }
+
+            updateQuantity(item.id, num);
+            delete item._justLimited;
+          }}
+        />
+
+  <TouchableOpacity
+    style={[
+      styles.qtyBtn,
+      item.availableQuantity > 0 && (item.quantity || 1) >= item.availableQuantity && styles.qtyBtnDisabled
+    ]}
+    onPress={() => {
+      const next = (item.quantity || 1) + 1;
+      if (item.availableQuantity > 0 && next > item.availableQuantity) {
+        Alert.alert("Hết lượt đặt", `Chỉ còn ${item.availableQuantity}kg có thể đặt trước`);
+        return;
+      }
+      updateQuantity(item.id, next);
+    }}
+    disabled={item.availableQuantity > 0 && (item.quantity || 1) >= item.availableQuantity}
+  >
+    <Icon
+      name="add"
+      size={18}
+      color={
+        item.availableQuantity > 0 && (item.quantity || 1) >= item.availableQuantity
+          ? "#aaa"
+          : "#27ae60"
+      }
+    />
+  </TouchableOpacity>
+
+  <TouchableOpacity
+    style={styles.deleteBtn}
+    onPress={() => removeItem(item.id)}
+  >
+    <Icon name="trash-outline" size={22} color="#e74c3c" />
+  </TouchableOpacity>
+</View>
       </View>
     </View>
   );
@@ -284,6 +368,20 @@ const styles = StyleSheet.create({
   checkoutText: { color: "#fff", fontSize: 18, fontWeight: "bold" },
   emptyCart: { flex: 1, justifyContent: "center", alignItems: "center" },
   emptyText: { fontSize: 18, color: "#999", marginTop: 16 },
+  qtyBtnDisabled: { backgroundColor: "#f0f0f0", opacity: 0.6, },
+  quantityInput: {
+    minWidth: 60,
+    height: 40,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    marginHorizontal: 10,
+    paddingHorizontal: 8,
+    textAlign: "center",
+    fontSize: 16,
+    fontWeight: "bold",
+    backgroundColor: "#fff",
+  },
 });
 
 export default CartPreOrderScreen;
