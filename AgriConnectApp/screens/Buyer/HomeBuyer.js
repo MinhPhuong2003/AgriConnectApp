@@ -179,6 +179,7 @@ const HomeBuyer = ({ route, navigation }) => {
         const snap = await firestore()
           .collection("products")
           .where("available", "==", true)
+          .orderBy("createdAt", "desc")
           .get();
 
         if (!isMounted) return;

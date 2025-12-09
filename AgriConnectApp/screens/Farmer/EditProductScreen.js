@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   PermissionsAndroid,
+  FlatList,
 } from "react-native";
 import firestore from "@react-native-firebase/firestore";
 import { launchImageLibrary } from "react-native-image-picker";
@@ -33,7 +34,73 @@ const EditProductScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [imageUri, setImageUri] = useState(null);
   const [imageBase64, setImageBase64] = useState(null);
+  const [provinceModal, setProvinceModal] = useState(false);
 
+  const provinces = [
+    { label: "Hà Nội", value: "Hà Nội" },
+    { label: "TP. Hồ Chí Minh", value: "TP. Hồ Chí Minh" },
+    { label: "An Giang", value: "An Giang" },
+    { label: "Bà Rịa - Vũng Tàu", value: "Bà Rịa - Vũng Tàu" },
+    { label: "Bắc Giang", value: "Bắc Giang" },
+    { label: "Bắc Kạn", value: "Bắc Kạn" },
+    { label: "Bạc Liêu", value: "Bạc Liêu" },
+    { label: "Bắc Ninh", value: "Bắc Ninh" },
+    { label: "Bến Tre", value: "Bến Tre" },
+    { label: "Bình Định", value: "Bình Định" },
+    { label: "Bình Dương", value: "Bình Dương" },
+    { label: "Bình Phước", value: "Bình Phước" },
+    { label: "Bình Thuận", value: "Bình Thuận" },
+    { label: "Cà Mau", value: "Cà Mau" },
+    { label: "Cần Thơ", value: "Cần Thơ" },
+    { label: "Cao Bằng", value: "Cao Bằng" },
+    { label: "Đà Nẵng", value: "Đà Nẵng" },
+    { label: "Đắk Lắk", value: "Đắk Lắk" },
+    { label: "Đắk Nông", value: "Đắk Nông" },
+    { label: "Điện Biên", value: "Điện Biên" },
+    { label: "Đồng Nai", value: "Đồng Nai" },
+    { label: "Đồng Tháp", value: "Đồng Tháp" },
+    { label: "Gia Lai", value: "Gia Lai" },
+    { label: "Hà Giang", value: "Hà Giang" },
+    { label: "Hà Nam", value: "Hà Nam" },
+    { label: "Hà Tĩnh", value: "Hà Tĩnh" },
+    { label: "Hải Dương", value: "Hải Dương" },
+    { label: "Hải Phòng", value: "Hải Phòng" },
+    { label: "Hậu Giang", value: "Hậu Giang" },
+    { label: "Hòa Bình", value: "Hòa Bình" },
+    { label: "Hưng Yên", value: "Hưng Yên" },
+    { label: "Khánh Hòa", value: "Khánh Hòa" },
+    { label: "Kiên Giang", value: "Kiên Giang" },
+    { label: "Kon Tum", value: "Kon Tum" },
+    { label: "Lai Châu", value: "Lai Châu" },
+    { label: "Lâm Đồng", value: "Lâm Đồng" },
+    { label: "Lạng Sơn", value: "Lạng Sơn" },
+    { label: "Lào Cai", value: "Lào Cai" },
+    { label: "Long An", value: "Long An" },
+    { label: "Nam Định", value: "Nam Định" },
+    { label: "Nghệ An", value: "Nghệ An" },
+    { label: "Ninh Bình", value: "Ninh Bình" },
+    { label: "Ninh Thuận", value: "Ninh Thuận" },
+    { label: "Phú Thọ", value: "Phú Thọ" },
+    { label: "Phú Yên", value: "Phú Yên" },
+    { label: "Quảng Bình", value: "Quảng Bình" },
+    { label: "Quảng Nam", value: "Quảng Nam" },
+    { label: "Quảng Ngãi", value: "Quảng Ngãi" },
+    { label: "Quảng Ninh", value: "Quảng Ninh" },
+    { label: "Quảng Trị", value: "Quảng Trị" },
+    { label: "Sóc Trăng", value: "Sóc Trăng" },
+    { label: "Sơn La", value: "Sơn La" },
+    { label: "Tây Ninh", value: "Tây Ninh" },
+    { label: "Thái Bình", value: "Thái Bình" },
+    { label: "Thái Nguyên", value: "Thái Nguyên" },
+    { label: "Thanh Hóa", value: "Thanh Hóa" },
+    { label: "Thừa Thiên Huế", value: "Thừa Thiên Huế" },
+    { label: "Tiền Giang", value: "Tiền Giang" },
+    { label: "Trà Vinh", value: "Trà Vinh" },
+    { label: "Tuyên Quang", value: "Tuyên Quang" },
+    { label: "Vĩnh Long", value: "Vĩnh Long" },
+    { label: "Vĩnh Phúc", value: "Vĩnh Phúc" },
+    { label: "Yên Bái", value: "Yên Bái" },
+  ];
   useEffect(() => {
     const oldImage = product.imageBase64 || product.imageUrl || null;
     setImageUri(oldImage);
@@ -142,8 +209,23 @@ const EditProductScreen = ({ route, navigation }) => {
     );
   };
 
+  const isFormValid = () => {
+    const hasImage = imageUri || imageBase64 || image;
+    return (
+      name.trim() &&
+      price &&
+      quantity &&
+      unit &&
+      season &&
+      category &&
+      hasImage &&
+      location &&
+      growingRegion.trim()
+    );
+  };
+
   const handleUpdateProduct = async () => {
-    if (!name.trim() || !price || !quantity || !unit || !season || !category || !image || !location || !growingRegion.trim()) {
+    if (!isFormValid()) {
       Alert.alert("Lỗi", "Vui lòng điền đầy đủ tất cả các trường bắt buộc!");
       return;
     }
@@ -173,7 +255,7 @@ const EditProductScreen = ({ route, navigation }) => {
         imageBase64: imageBase64 || "",
         imageUrl: image,
         season,
-        region,
+        region: growingRegion,
         category,
         growingRegion: growingRegion.trim(),
         location: {
@@ -265,12 +347,12 @@ const EditProductScreen = ({ route, navigation }) => {
       </TouchableOpacity>
 
       <Text style={styles.label}>Khu vực trồng *</Text>
-      <TextInput
-        style={styles.input}
-        value={growingRegion}
-        onChangeText={setGrowingRegion}
-        placeholder="VD: Đà Lạt, Lâm Đồng..."
-      />
+        <TouchableOpacity style={styles.dateBtn} onPress={() => setProvinceModal(true)}>
+          <Text style={styles.dateText}>
+            {growingRegion || "Chọn tỉnh/thành phố"}
+          </Text>
+          <Icon name="chevron-down" size={22} color="#27ae60" />
+      </TouchableOpacity>
 
       <Text style={styles.label}>Vị trí bán hàng</Text>
       <TextInput
@@ -320,6 +402,45 @@ const EditProductScreen = ({ route, navigation }) => {
           {loading ? "Đang lưu..." : "Lưu thay đổi"}
         </Text>
       </TouchableOpacity>
+      
+      {/* MODAL CHỌN TỈNH/THÀNH PHỐ - ĐẸP NHƯ ADD PREORDER */}
+            <Modal visible={provinceModal} transparent animationType="slide">
+              <View style={styles.modalOverlayProvince}>
+                <View style={styles.provinceModalContainer}>
+                  <View style={styles.pickerHeader}>
+                    <TouchableOpacity onPress={() => setProvinceModal(false)}>
+                      <Text style={{ fontSize: 17, color: "#007AFF" }}>Hủy</Text>
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 18, fontWeight: "600" }}>Chọn tỉnh/thành</Text>
+                    <TouchableOpacity onPress={() => setProvinceModal(false)}>
+                      <Text style={{ fontSize: 17, color: "#007AFF" }}>Xong</Text>
+                    </TouchableOpacity>
+                  </View>
+      
+                  <FlatList
+                    data={provinces}
+                    keyExtractor={(item) => item.value}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={[
+                          styles.provinceItem,
+                          growingRegion === item.value && { backgroundColor: "#e8f5e9" }
+                        ]}
+                        onPress={() => {
+                          setGrowingRegion(item.value);
+                          setProvinceModal(false);
+                        }}
+                      >
+                        <Text style={styles.provinceText}>{item.label}</Text>
+                        {growingRegion === item.value && (
+                          <Icon name="checkmark" size={24} color="#27ae60" />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              </View>
+            </Modal>
 
       {/* Modal Đơn vị */}
       <Modal transparent visible={isUnitModalVisible} animationType="fade">
@@ -421,6 +542,55 @@ const styles = StyleSheet.create({
   modalItem: { paddingVertical: 14, paddingHorizontal: 10 },
   modalText: { fontSize: 16, textAlign: "center" },
   selectedText: { fontWeight: "bold", color: "#2e7d32" },
+  dateBtn: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    padding: 16,
+    backgroundColor: "#fafafa",
+    marginBottom: 16,
+  },
+  dateText: {
+    fontSize: 16,
+    color: "#333",
+  },
+  dateTextSelected: {
+    color: "#27ae60",
+    fontWeight: "600",
+  },
+  // Modal giống hệt AddPreOrderScreen
+  modalOverlayProvince: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "flex-end",
+  },
+  provinceModalContainer: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "80%",
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  provinceItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+  },
+  provinceText: {
+    fontSize: 17,
+    color: "#333",
+  },
 });
 
 export default EditProductScreen;

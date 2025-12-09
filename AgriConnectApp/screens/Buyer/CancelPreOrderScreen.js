@@ -48,21 +48,47 @@ const CancelPreOrderScreen = ({ navigation, route }) => {
         : cancelReasons.find((r) => r.id === selectedReason).label;
 
     try {
-      await firestore()
-        .collection("preOrderBookings")
-        .doc(order.id)
-        .update({
+      // DÙNG TRANSACTION ĐỂ ĐẢM BẢO AN TOÀN DỮ LIỆU
+      await firestore().runTransaction(async (transaction) => {
+        const bookingRef = firestore().collection("preOrderBookings").doc(order.id);
+
+        // 1. Cập nhật trạng thái đơn đặt trước thành cancelled
+        transaction.update(bookingRef, {
           status: "cancelled",
           cancelReason: reasonLabel,
           cancelDate: firestore.FieldValue.serverTimestamp(),
           updatedAt: firestore.FieldValue.serverTimestamp(),
         });
 
+        // 2. Hoàn lại số lượng đã đặt cho từng sản phẩm trong đơn
+        if (order.products && order.products.length > 0) {
+          for (const prod of order.products) {
+            const preOrderRef = firestore().collection("preOrders").doc(prod.preOrderId);
+
+            const preOrderDoc = await transaction.get(preOrderRef);
+            if (preOrderDoc.exists) {
+              const data = preOrderDoc.data();
+              const currentBooked = data.preOrderCurrent || 0;
+              const limit = data.preOrderLimit || 0;
+
+              // Chỉ hoàn lại nếu có giới hạn (limit > 0)
+              if (limit > 0) {
+                const newCurrent = Math.max(0, currentBooked - prod.quantity);
+                transaction.update(preOrderRef, {
+                  preOrderCurrent: newCurrent,
+                });
+              }
+            }
+          }
+        }
+      });
+
+      // Thành công → hiện modal
       setCancelReasonFinal(reasonLabel);
       setShowSuccessModal(true);
     } catch (error) {
-      Alert.alert("Lỗi", "Không thể hủy đơn đặt trước.");
-      console.error(error);
+      console.error("Lỗi hủy đơn đặt trước:", error);
+      Alert.alert("Lỗi", "Không thể hủy đơn. Vui lòng thử lại sau.");
     }
   };
 

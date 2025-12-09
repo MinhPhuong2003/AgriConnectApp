@@ -74,13 +74,13 @@ const ProductScreen = ({ navigation }) => {
     <View style={styles.card}>
       <TouchableOpacity
         style={styles.cardContent}
-        onPress={() => navigation.navigate("ProductDetail", { product: item })}
+        // onPress={() => navigation.navigate("ProductDetail", { product: item })}
       >
         <Image
           source={{
             uri:
-              item.imageBase64 ||                    // Ưu tiên base64 (từ AddProduct mới)
-              item.imageUrl ||                       // Cũ vẫn hỗ trợ
+              item.imageBase64 ||
+              item.imageUrl ||
               "https://cdn-icons-png.flaticon.com/512/415/415733.png",
           }}
           style={styles.image}
