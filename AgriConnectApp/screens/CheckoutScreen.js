@@ -134,6 +134,9 @@ const CheckoutScreen = ({ navigation, route }) => {
     setOrderLoading(true);
 
     try {
+      const batch = firestore().batch();
+
+      const orderRef = firestore().collection("orders").doc();
       const orderData = {
         userId: uid,
         items: items.map((item) => ({
@@ -164,17 +167,28 @@ const CheckoutScreen = ({ navigation, route }) => {
         updatedAt: firestore.FieldValue.serverTimestamp(),
         reviewed: false,
       };
-      const orderRef = await firestore().collection("orders").add(orderData);
-      const cartRef = firestore().collection("carts").doc(uid);
-      await firestore().runTransaction(async (transaction) => {
-        const cartDoc = await transaction.get(cartRef);
-        if (cartDoc.exists && cartDoc.data()?.items) {
-          const remainingItems = cartDoc.data().items.filter(
-            (cartItem) => !items.some((selected) => selected.id === cartItem.id)
-          );
-          transaction.set(cartRef, { items: remainingItems }, { merge: true });
-        }
+
+      batch.set(orderRef, orderData);
+
+      const userCartRef = firestore()
+        .collection("users")
+        .doc(uid)
+        .collection("cartItems");
+
+      items.forEach((item) => {
+        const cartItemRef = userCartRef.doc(item.id);
+        batch.delete(cartItemRef);
       });
+
+      items.forEach((item) => {
+        const productRef = firestore().collection("products").doc(item.id);
+        batch.update(productRef, {
+          stock: firestore.FieldValue.increment(-item.quantity),
+        });
+      });
+
+      await batch.commit();
+
       navigation.replace("OrderSuccess", {
         orderId: orderRef.id,
         finalTotal,
@@ -189,6 +203,7 @@ const CheckoutScreen = ({ navigation, route }) => {
       setOrderLoading(false);
     }
   };
+
 
   if (loading) {
     return (

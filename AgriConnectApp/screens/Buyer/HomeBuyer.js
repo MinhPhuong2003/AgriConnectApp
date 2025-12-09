@@ -65,84 +65,106 @@ const HomeBuyer = ({ route, navigation }) => {
   }, []);
 
   useEffect(() => {
-    const user = auth().currentUser;
-    if (!user) {
+  const user = auth().currentUser;
+  if (!user) {
+    setCartCount(0);
+    return;
+  }
+
+  const cartItemsRef = firestore()
+    .collection("users")
+    .doc(user.uid)
+    .collection("cartItems");
+
+  const unsubscribe = cartItemsRef.onSnapshot(
+    (snapshot) => {
+      setCartCount(snapshot.size); // Siêu nhanh, siêu chính xác
+    },
+    (error) => {
+      console.error("Lỗi listener giỏ hàng:", error);
       setCartCount(0);
-      return;
     }
+  );
 
-    const cartRef = firestore().collection("carts").doc(user.uid);
-
-    const unsubscribe = cartRef.onSnapshot(
-      (doc) => {
-        if (doc.exists && doc.data()) {
-          const items = doc.data().items || [];
-          const uniqueProductCount = items.filter(item => item && item.id).length;
-          setCartCount(uniqueProductCount);
-        } else {
-          setCartCount(0);
-        }
-      },
-      (error) => {
-        console.error("Lỗi theo dõi giỏ:", error);
-        setCartCount(0);
-      }
-    );
-
-    return () => unsubscribe();
-  }, []);
+  return () => unsubscribe();
+}, []);
 
   
 
-  const addToCart = async (product) => {
+  const addToCart = async (product, autoSelect = false) => {
     const user = auth().currentUser;
     if (!user) {
       Alert.alert("Thông báo", "Vui lòng đăng nhập để thêm vào giỏ hàng!");
       return;
     }
-    setCartCount(prev => prev + 1);
-    const cartRef = firestore().collection("carts").doc(user.uid);
-    try {
-      await firestore().runTransaction(async (transaction) => {
-        const cartDoc = await transaction.get(cartRef);
-        let cartItems = [];
 
-        if (cartDoc.exists && cartDoc.data()) {
-          cartItems = cartDoc.data().items || [];
-        }
-        const existingIndex = cartItems.findIndex((item) => item.id === product.id);
-        const discountedPrice = Math.round(product.price * (1 - (product.discount || 0) / 100));
-        const imageToUse = product.imageBase64 || product.imageUrl;
-        const cartItem = {
-          id: product.id,
-          name: product.name,
-          price: discountedPrice,
-          originalPrice: product.price,
-          discount: product.discount || 0,
-          imageBase64: product.imageBase64 || null,
-          imageUrl: product.imageBase64 ? null : imageToUse,
-          quantity: 1,
-          sellerId: product.sellerId || product.farmerId || "unknown",
-          farmerName: product.farmerName || product.sellerName || "Nông dân",
-          farmerAvatarUrl: product.farmerAvatarUrl || product.sellerAvatarUrl || null,
-        };
+    const discountedPrice = Math.round(product.price * (1 - (product.discount || 0) / 100));
+    const imageToUse = product.imageBase64 || product.imageUrl;
 
-        if (existingIndex >= 0) {
-          cartItems[existingIndex].quantity += 1;
-          cartItems[existingIndex].imageBase64 = cartItem.imageBase64;
-          cartItems[existingIndex].imageUrl = cartItem.imageUrl;
-        } else {
-          cartItems.push(cartItem);
-        }
+    const cartItemRef = firestore()
+      .collection("users")
+      .doc(user.uid)
+      .collection("cartItems")
+      .doc(product.id);
 
-        transaction.set(cartRef, { items: cartItems, updatedAt: firestore.FieldValue.serverTimestamp() }, { merge: true });
-      });
+      try {
+    const snapshot = await cartItemRef.get();
 
-    } catch (error) {
-      console.error("Lỗi thêm vào giỏ:", error);
-      Alert.alert("Lỗi", "Không thể thêm vào giỏ. Vui lòng thử lại.");
+    const currentQty = snapshot.exists
+      ? (snapshot.data()?.quantity || 0)
+      : 0;
+
+    const maxStock = parseInt(
+      product.stock?.toString() ||
+      product.quantityAvailable?.toString() ||
+      "0"
+    );
+
+    if (maxStock <= 0) {
+      Alert.alert("Thông báo", "Sản phẩm đã hết hàng!");
+      return;
     }
-  };
+
+    if (currentQty + 1 > maxStock) {
+      Alert.alert(
+        "Thông báo",
+        `Chỉ còn ${maxStock} sản phẩm trong kho!`
+      );
+      return;
+    }
+
+    await cartItemRef.set(
+      {
+        name: product.name || "",
+        price: discountedPrice,
+        originalPrice: product.price,
+        discount: product.discount || 0,
+        imageBase64: product.imageBase64 || null,
+        imageUrl: product.imageBase64 ? null : imageToUse,
+        sellerId: product.sellerId || product.farmerId || "unknown",
+        farmerName: product.farmerName || product.sellerName || "Nông dân",
+        farmerAvatarUrl: product.farmerAvatarUrl || product.sellerAvatarUrl || null,
+
+        quantity: currentQty + 1,
+
+        addedAt: firestore.FieldValue.serverTimestamp(),
+        selected: autoSelect ? true : false
+      },
+      { merge: true }
+    );
+
+    if (autoSelect) {
+      navigation.navigate("Cart", {
+        highlightProductId: product.id
+      });
+    }
+
+  } catch (error) {
+    console.error("Lỗi thêm vào giỏ:", error);
+    Alert.alert("Lỗi", "Không thể thêm vào giỏ. Vui lòng thử lại.");
+  }
+
+};
 
   // === VÀO CHẾ ĐỘ TÌM KIẾM ===
   const enterSearchMode = () => {
@@ -174,31 +196,28 @@ const HomeBuyer = ({ route, navigation }) => {
 
   useEffect(() => {
     let isMounted = true;
-    const loadProducts = async () => {
-      try {
-        const snap = await firestore()
-          .collection("products")
-          .where("available", "==", true)
-          .orderBy("createdAt", "desc")
-          .get();
+    const unsubscribeProducts = firestore()
+      .collection("products")
+      .where("available", "==", true)
+      .orderBy("createdAt", "desc")
+      .onSnapshot(
+        (snapshot) => {
+          if (!isMounted) return;
+          const list = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            avgRating: "5.0",
+            reviewsCount: 0,
+          }));
+          setProducts(list);
+          setLoading(false);
+        },
+        (err) => {
+          console.error("Lỗi load realtime products:", err);
+          if (isMounted) setLoading(false);
+        }
+    );
 
-        if (!isMounted) return;
-
-        const list = snap.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data(),
-          avgRating: "5.0",
-          reviewsCount: 0,
-        }));
-
-        setProducts(list);
-        setLoading(false);
-      } catch (err) {
-        console.error("Lỗi load sản phẩm:", err);
-        if (isMounted) setLoading(false);
-      }
-    };
-    loadProducts();
     const unsub = firestore()
       .collection("reviews")
       .onSnapshot((snapshot) => {
@@ -328,6 +347,14 @@ const HomeBuyer = ({ route, navigation }) => {
     const originalPrice = item.price || 0;
     const discountedPrice = originalPrice * (1 - discount / 100);
     const productImageUri = item.imageBase64 || item.imageUrl;
+    const maxStock = parseInt(
+      item.stock?.toString() ||
+      item.quantityAvailable?.toString() ||
+      "0"
+    );
+
+    const isOutOfStock = maxStock <= 0;
+
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -335,6 +362,12 @@ const HomeBuyer = ({ route, navigation }) => {
       >
         <View style={{ flex: 1, justifyContent: "space-between" }}>
           <View style={styles.imageWrapper}>
+            {isOutOfStock && (
+              <View style={styles.outOfStockBadge}>
+                <Text style={styles.outOfStockText}>Hết hàng</Text>
+              </View>
+            )}
+
             <Image
               source={{ uri: productImageUri }}
               style={styles.productImage}
@@ -390,14 +423,32 @@ const HomeBuyer = ({ route, navigation }) => {
             </Text>
           </View>
 
-          <View style={styles.buttonRow}>
-            <TouchableOpacity
-              style={styles.addToCartButton}
-              onPress={() => addToCart(item)}
-            >
-              <Icon name="cart-outline" size={16} color="#fff" />
-            </TouchableOpacity>
-          </View>
+          <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.buyNowButton,
+              isOutOfStock && { backgroundColor: "#ccc" }
+            ]}
+            disabled={isOutOfStock}
+            onPress={() => addToCart(item, true)}
+          >
+            <Text style={styles.buyNowText}>
+              {isOutOfStock ? "Hết hàng" : "Mua ngay"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.addToCartButton,
+              isOutOfStock && { backgroundColor: "#aaa" }
+            ]}
+            disabled={isOutOfStock}
+            onPress={() => addToCart(item)}
+          >
+            <Icon name="cart-outline" size={16} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
         </View>
       </TouchableOpacity>
     );
@@ -785,6 +836,40 @@ const styles = StyleSheet.create({
   chatBadgeText: {
     color: "#fff",
     fontSize: 10,
+    fontWeight: "bold",
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 14,
+  },
+  buyNowButton: {
+    backgroundColor: "#27ae60",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
+    minWidth: 90,
+    alignItems: "center",
+  },
+  buyNowText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  outOfStockBadge: {
+    position: "absolute",
+    top: 6,
+    left: 6,
+    backgroundColor: "rgba(255,0,0,0.85)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    zIndex: 10,
+  },
+  outOfStockText: {
+    color: "#fff",
+    fontSize: 11,
     fontWeight: "bold",
   },
 });

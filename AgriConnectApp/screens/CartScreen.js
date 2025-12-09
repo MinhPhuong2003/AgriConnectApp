@@ -9,6 +9,7 @@ import {
   FlatList,
   ActivityIndicator,
   Alert,
+  TextInput 
 } from "react-native";
 import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
@@ -18,41 +19,116 @@ const CartScreen = ({ navigation }) => {
   const [cartItems, setCartItems] = useState([]);
   const [selectedMap, setSelectedMap] = useState(new Map());
   const [loading, setLoading] = useState(true);
+  const [quantityInputs, setQuantityInputs] = useState({});
+
+  const updateQuantityByInput = async (id, value) => {
+    const user = auth().currentUser;
+    if (!user) return;
+
+    const cartRef = firestore()
+      .collection("users")
+      .doc(user.uid)
+      .collection("cartItems")
+      .doc(id);
+
+    if (!value || value === "") {
+      await cartRef.update({ quantity: 1 });
+
+      setQuantityInputs(prev => ({
+        ...prev,
+        [id]: "1",
+      }));
+
+      return;
+    }
+
+    const newQty = parseInt(value);
+
+    if (isNaN(newQty) || newQty < 1) {
+      await cartRef.update({ quantity: 1 });
+
+      setQuantityInputs(prev => ({
+        ...prev,
+        [id]: "1",
+      }));
+
+      return;
+    }
+
+    try {
+      const productRef = firestore().collection("products").doc(id);
+      const productDoc = await productRef.get();
+
+      const maxStock = parseInt(
+        productDoc.data()?.stock?.toString() ||
+        productDoc.data()?.quantityAvailable?.toString() ||
+        "0"
+      );
+
+      if (newQty > maxStock) {
+        Alert.alert(
+          "Thông báo",
+          `Không thể đặt thêm. Chỉ còn ${maxStock} sản phẩm trong kho.`
+        );
+
+        await cartRef.update({ quantity: maxStock });
+
+        setQuantityInputs(prev => ({
+          ...prev,
+          [id]: maxStock.toString(),
+        }));
+
+        return;
+      }
+
+      await cartRef.update({ quantity: newQty });
+
+      setQuantityInputs(prev => ({
+        ...prev,
+        [id]: newQty.toString(),
+      }));
+    } catch (err) {
+      console.log("Lỗi nhập số lượng:", err);
+    }
+  };
 
   useEffect(() => {
     const user = auth().currentUser;
     if (!user) {
+      setCartItems([]);
       setLoading(false);
       return;
     }
 
-    const cartRef = firestore().collection("carts").doc(user.uid);
+    const cartRef = firestore()
+      .collection("users")
+      .doc(user.uid)
+      .collection("cartItems");
 
     const unsubscribe = cartRef.onSnapshot(
-      (doc) => {
-        if (doc.exists && doc.data()) {
-          const data = doc.data();
-          const newItems = (data.items || []).map((item) => ({
-            ...item,
-            selected: !!item.selected,
-          }));
-          setCartItems(newItems);
+      (snapshot) => {
+        const items = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          selected: doc.data().selected || false,
+        }));
 
-          const newMap = new Map();
-          newItems.forEach((item) => {
-            newMap.set(item.id, item.selected);
-          });
-          setSelectedMap(newMap);
-        } else {
-          setCartItems([]);
-          setSelectedMap(new Map());
-        }
+        setCartItems(items);
         setLoading(false);
+
+        const newMap = new Map();
+        items.forEach((item) => newMap.set(item.id, item.selected));
+        setSelectedMap(newMap);
+
+        if (items.length > 0 && items.every(i => i.selected)) {
+          setSelectedAll(true);
+        } else {
+          setSelectedAll(false);
+        }
       },
-      (error) => {
-        console.error("Lỗi tải giỏ:", error);
+      (err) => {
+        console.error("Lỗi load giỏ hàng:", err);
         setCartItems([]);
-        setSelectedMap(new Map());
         setLoading(false);
       }
     );
@@ -94,94 +170,83 @@ const CartScreen = ({ navigation }) => {
     }
   };
 
-  const toggleItem = (id) => {
-    const newSelected = !selectedMap.get(id);
-    setSelectedMap((prev) => {
-      const newMap = new Map(prev);
-      newMap.set(id, newSelected);
-      return newMap;
-    });
-    updateSelectedInFirestore(id, newSelected);
-  };
-
-  const updateSelectedInFirestore = async (id, selected) => {
+  const toggleItem = async (id) => {
     const user = auth().currentUser;
     if (!user) return;
 
-    const cartRef = firestore().collection("carts").doc(user.uid);
-    try {
-      await firestore().runTransaction(async (transaction) => {
-        const doc = await transaction.get(cartRef);
-        if (!doc.exists || !doc.data()) return;
+    const newSelected = !selectedMap.get(id);
+    setSelectedMap(prev => new Map(prev).set(id, newSelected));
 
-        const items = doc.data().items || [];
-        const index = items.findIndex((i) => i.id === id);
-        if (index >= 0) {
-          items[index].selected = selected;
-          transaction.set(cartRef, { items }, { merge: true });
-        }
-      });
-    } catch (error) {
-      console.error("Lỗi cập nhật selected:", error);
-    }
+    await firestore()
+      .collection("users")
+      .doc(user.uid)
+      .collection("cartItems")
+      .doc(id)
+      .update({ selected: newSelected });
   };
 
   const updateQuantity = async (id, delta) => {
     const user = auth().currentUser;
     if (!user) return;
-    const currentItem = cartItems.find(item => item.id === id);
-    if (!currentItem) return;
 
-    if (delta === -1 && currentItem.quantity === 1) {
-      Alert.alert(
-        "Xóa sản phẩm",
-        `Bạn có chắc muốn xóa "${currentItem.name}" ra khỏi giỏ hàng?`,
-        [
-          { text: "Hủy", style: "cancel" },
-          { text: "Xóa", style: "destructive", onPress: () => removeItemCompletely(id) },
-        ]
-      );
-      return;
-    }
+    const cartRef = firestore()
+      .collection("users")
+      .doc(user.uid)
+      .collection("cartItems")
+      .doc(id);
 
-    const cartRef = firestore().collection("carts").doc(user.uid);
     try {
-      await firestore().runTransaction(async (transaction) => {
-        const doc = await transaction.get(cartRef);
-        if (!doc.exists || !doc.data()) return;
-        let items = [...(doc.data().items || [])];
-        const index = items.findIndex((i) => i.id === id);
-        if (index >= 0) {
-          const newQty = items[index].quantity + delta;
-          if (newQty <= 0) {
-            items.splice(index, 1);
-          } else {
-            items[index].quantity = newQty;
-          }
-          transaction.set(cartRef, { items }, { merge: true });
-        }
+      const cartDoc = await cartRef.get();
+      if (!cartDoc.exists) return;
+
+      const currentQty = cartDoc.data()?.quantity || 0;
+      const newQty = currentQty + delta;
+
+      if (newQty < 1) return;
+
+      const productRef = firestore().collection("products").doc(id);
+      const productDoc = await productRef.get();
+
+      const maxStock = parseInt(
+        productDoc.data()?.stock?.toString() ||
+        productDoc.data()?.quantityAvailable?.toString() ||
+        "0"
+      );
+
+      if (maxStock <= 0) {
+        Alert.alert("Thông báo", "Sản phẩm đã hết hàng!");
+        return;
+      }
+
+      if (newQty > maxStock) {
+        Alert.alert(
+          "Thông báo",
+          `Chỉ còn ${maxStock} sản phẩm trong kho!`
+        );
+        return;
+      }
+
+      await cartRef.update({
+        quantity: newQty
       });
+
     } catch (error) {
-      console.error("Lỗi cập nhật số lượng:", error);
+      console.log("Lỗi cập nhật số lượng:", error);
+      Alert.alert("Lỗi", "Không thể cập nhật số lượng");
     }
   };
+
 
   const removeItemCompletely = async (id) => {
     const user = auth().currentUser;
     if (!user) return;
-    const cartRef = firestore().collection("carts").doc(user.uid);
-    try {
-      await firestore().runTransaction(async (transaction) => {
-        const doc = await transaction.get(cartRef);
-        if (!doc.exists || !doc.data()) return;
 
-        let items = doc.data().items || [];
-        items = items.filter((i) => i.id !== id);
-        transaction.set(cartRef, { items }, { merge: true });
-      });
-    } catch (error) {
-      console.error("Lỗi xóa sản phẩm:", error);
-    }
+    await firestore()
+      .collection("users")
+      .doc(user.uid)
+      .collection("cartItems")
+      .doc(id)
+      .delete();
   };
 
   const removeFromCart = (id, name) => {
@@ -235,7 +300,25 @@ const CartScreen = ({ navigation }) => {
         <TouchableOpacity onPress={() => updateQuantity(item.id, -1)} style={styles.qtyBtn}>
           <Icon name="remove" size={16} color="#666" />
         </TouchableOpacity>
-        <Text style={styles.qtyText}>{item.quantity}</Text>
+        <TextInput
+          style={styles.qtyInput}
+          keyboardType="number-pad"
+          value={
+            quantityInputs[item.id] !== undefined
+              ? quantityInputs[item.id]
+              : item.quantity.toString()
+          }
+          onChangeText={(text) => {
+            setQuantityInputs((prev) => ({
+              ...prev,
+              [item.id]: text,
+            }));
+          }}
+          onBlur={() => {
+            updateQuantityByInput(item.id, quantityInputs[item.id] ?? item.quantity.toString());
+          }}
+        />
+
         <TouchableOpacity onPress={() => updateQuantity(item.id, 1)} style={styles.qtyBtn}>
           <Icon name="add" size={16} color="#666" />
         </TouchableOpacity>
@@ -367,7 +450,14 @@ const styles = StyleSheet.create({
     marginRight: 10
   },
   qtyBtn: { width: 28, height: 28, justifyContent: "center", alignItems: "center", backgroundColor: "#f9f9f9" },
-  qtyText: { width: 32, textAlign: "center", fontSize: 14, fontWeight: "600" },
+  qtyText: { 
+  minWidth: 50,          
+  paddingHorizontal: 6,  
+  textAlign: "center", 
+  fontSize: 16, 
+  fontWeight: "600",
+  color: "#333"
+},
   deleteBtn: { padding: 8 },
   emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", marginTop: 80 },
   emptyText: { marginTop: 16, fontSize: 16, color: "#999" },

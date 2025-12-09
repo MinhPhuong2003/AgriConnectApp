@@ -53,11 +53,25 @@ const CancelOrderScreen = ({ navigation, route }) => {
 
     try {
       if (order && order.id) {
-        await firestore().collection("orders").doc(order.id).update({
+
+        const batch = firestore().batch();
+
+        const orderRef = firestore().collection("orders").doc(order.id);
+        batch.update(orderRef, {
           status: "cancelled",
           cancelReason: reasonLabel,
           cancelDate: firestore.FieldValue.serverTimestamp(),
         });
+
+        for (const item of order.items) {
+          const productRef = firestore().collection("products").doc(item.id);
+
+          batch.update(productRef, {
+            stock: firestore.FieldValue.increment(item.quantity),
+          });
+        }
+
+        await batch.commit();
 
         navigation.navigate("CancelSuccess", {
           order,
@@ -66,6 +80,7 @@ const CancelOrderScreen = ({ navigation, route }) => {
           cancelDate: new Date().toLocaleString("vi-VN"),
           orderId: order.id,
         });
+
       } else {
         Alert.alert("Lỗi", "Không thể tìm thấy thông tin đơn hàng.");
       }

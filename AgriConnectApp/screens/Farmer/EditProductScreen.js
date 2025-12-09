@@ -24,7 +24,9 @@ const EditProductScreen = ({ route, navigation }) => {
   const [name, setName] = useState(product.name || "");
   const [description, setDescription] = useState(product.description || "");
   const [price, setPrice] = useState(product.price?.toString() || "");
-  const [quantity, setQuantity] = useState(product.quantity?.toString() || product.stock?.toString() || "");
+  const [quantity, setQuantity] = useState(
+    product.stock?.toString() || "0"
+  );
   const [unit, setUnit] = useState(product.unit || "");
   const [season, setSeason] = useState(product.season || "");
   const [region, setRegion] = useState(product.region || product.location?.address || "");
