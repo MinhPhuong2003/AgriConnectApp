@@ -139,6 +139,7 @@ const CheckoutScreen = ({ navigation, route }) => {
       const orderRef = firestore().collection("orders").doc();
       const orderData = {
         userId: uid,
+        sellerId: items[0].sellerId,
         items: items.map((item) => ({
           id: item.id,
           name: item.name,

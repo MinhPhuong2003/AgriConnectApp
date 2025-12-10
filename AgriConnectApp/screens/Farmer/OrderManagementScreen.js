@@ -28,6 +28,23 @@ const OrderManagementScreen = ({ navigation, route }) => {
 
   const initialTab = route.params?.initialTab;
 
+  const updateSoldQuantity = async (items) => {
+    try {
+      await firestore().runTransaction(async (transaction) => {
+        items.forEach((item) => {
+          const productRef = firestore().collection("products").doc(item.id);
+          transaction.update(productRef, {
+            soldQuantity: firestore.FieldValue.increment(item.quantity),
+            ordersCount: firestore.FieldValue.increment(1),
+          });
+        });
+      });
+      console.log("Đã cập nhật soldQuantity khi giao hàng!");
+    } catch (error) {
+      console.error("Lỗi cập nhật soldQuantity:", error);
+    }
+  };
+
   const getImageSource = (item) => {
     if (item.imageBase64) {
       return { uri: item.imageBase64 };
@@ -114,6 +131,7 @@ const OrderManagementScreen = ({ navigation, route }) => {
           createdAt: firestore.FieldValue.serverTimestamp(),
           read: false,
         });
+        await updateSoldQuantity(orderData.items || []);
       }
 
       await orderRef.update(updates);

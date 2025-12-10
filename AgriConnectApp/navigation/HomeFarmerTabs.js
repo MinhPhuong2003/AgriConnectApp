@@ -25,11 +25,11 @@ const HomeFarmerTabs = () => {
             case "MyProducts":
               iconName = "leaf-outline";
               break;
-            case "PreOrder":
-              iconName = "calendar-outline";
-              break;
             case "Chat":
               iconName = "chatbubble-ellipses-outline";
+              break;  
+            case "PreOrder":
+              iconName = "calendar-outline";
               break;
             case "Profile":
               iconName = "person-outline";
@@ -53,18 +53,18 @@ const HomeFarmerTabs = () => {
         options={{ title: "Sản phẩm" }}
       />
 
-      {/* Đặt trước */}
-      <Tab.Screen
-        name="PreOrder"
-        component={PreOrderScreen}
-        options={{ title: "Đặt trước" }}
-      />
-
       {/* Chat với người mua */}
       <Tab.Screen
         name="Chat"
         component={ChatScreen}
         options={{ title: "Trò chuyện" }}
+      />
+
+      {/* Đặt trước */}
+      <Tab.Screen
+        name="PreOrder"
+        component={PreOrderScreen}
+        options={{ title: "Đặt trước" }}
       />
 
       {/* Hồ sơ nông dân */}

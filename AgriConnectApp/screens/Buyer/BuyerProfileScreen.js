@@ -205,7 +205,7 @@ const BuyerProfileScreen = ({ navigation }) => {
               style={styles.statusItem}
               onPress={() => navigation.navigate("MyOrder", { initialTab: "pending" })}
             >
-              <Icon name="time-outline" size={24} color="#f39c12" />
+              <Icon name="time-outline" size={24} color="#3498db" />
               <Text style={styles.statusText}>Chờ xác nhận ({pendingOrders.length})</Text>
             </TouchableOpacity>
 
@@ -213,7 +213,7 @@ const BuyerProfileScreen = ({ navigation }) => {
               style={styles.statusItem}
               onPress={() => navigation.navigate("MyOrder", { initialTab: "confirmed" })}
             >
-              <Icon name="cube-outline" size={24} color="#3498db" />
+              <Icon name="sync-outline" size={24} color="#3498db" />
               <Text style={styles.statusText}>Đang xử lý ({confirmedOrders.length})</Text>
             </TouchableOpacity>
 
@@ -221,15 +221,15 @@ const BuyerProfileScreen = ({ navigation }) => {
               style={styles.statusItem}
               onPress={() => navigation.navigate("MyOrder", { initialTab: "shipping" })}
             >
-              <Icon name="car-outline" size={24} color="#8e44ad" />
-              <Text style={styles.statusText}>Đang giao ({shippingOrders.length})</Text>
+              <Icon name="bag-check" size={24} color="#3498db" />
+              <Text style={styles.statusText}>Đã giao ({shippingOrders.length})</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={styles.statusItem}
               onPress={() => navigation.navigate("ListReview")}
             >
-              <Icon name="star-outline" size={24} color="#f1c40f" />
+              <Icon name="star-outline" size={24} color="#3498db" />
               <Text style={styles.statusText}>Đánh giá ({unreviewedOrdersCount})</Text>
             </TouchableOpacity>
           </View>

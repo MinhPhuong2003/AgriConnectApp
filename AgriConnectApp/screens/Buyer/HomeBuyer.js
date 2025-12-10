@@ -32,7 +32,7 @@ const HomeBuyer = ({ route, navigation }) => {
   const scrollViewRef = useRef(null);
   const inputRef = useRef(null);
   const [unreadMessagesCount, setUnreadMessagesCount] = useState(0);
-
+  
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
   };
@@ -78,7 +78,7 @@ const HomeBuyer = ({ route, navigation }) => {
 
   const unsubscribe = cartItemsRef.onSnapshot(
     (snapshot) => {
-      setCartCount(snapshot.size); // Siêu nhanh, siêu chính xác
+      setCartCount(snapshot.size);
     },
     (error) => {
       console.error("Lỗi listener giỏ hàng:", error);
@@ -195,33 +195,29 @@ const HomeBuyer = ({ route, navigation }) => {
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    const unsubscribeProducts = firestore()
+    let mounted = true;
+    const productUnsub = firestore()
       .collection("products")
       .where("available", "==", true)
       .orderBy("createdAt", "desc")
-      .onSnapshot(
-        (snapshot) => {
-          if (!isMounted) return;
-          const list = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            avgRating: "5.0",
-            reviewsCount: 0,
-          }));
-          setProducts(list);
-          setLoading(false);
-        },
-        (err) => {
-          console.error("Lỗi load realtime products:", err);
-          if (isMounted) setLoading(false);
-        }
-    );
+      .onSnapshot((snap) => {
+        if (!mounted) return;
+        const list = snap.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+          soldQuantity: doc.data().soldQuantity || 0,
+          ordersCount: doc.data().ordersCount || 0,
+          avgRating: "5.0",
+          reviewsCount: 0,
+        }));
+        setProducts(list);
+        setLoading(false);
+      });
 
     const unsub = firestore()
       .collection("reviews")
       .onSnapshot((snapshot) => {
-        if (!isMounted) return;
+        if (!mounted) return;
         snapshot.docChanges().forEach((change) => {
           if (change.type === "added" || change.type === "modified" || change.type === "removed") {
             const review = change.doc.data();
@@ -244,7 +240,7 @@ const HomeBuyer = ({ route, navigation }) => {
           total += doc.data().rating || 0;
         });
         const avg = count > 0 ? (total / count) : 5.0;
-        if (isMounted) {
+        if (mounted) {
           setProducts(prev => prev.map(p =>
             p.id === productId
               ? { ...p, avgRating: avg.toFixed(1), reviewsCount: count }
@@ -257,7 +253,7 @@ const HomeBuyer = ({ route, navigation }) => {
     };
 
     return () => {
-      isMounted = false;
+      mounted = false;
       unsub();
     };
   }, []);
@@ -352,7 +348,7 @@ const HomeBuyer = ({ route, navigation }) => {
       item.quantityAvailable?.toString() ||
       "0"
     );
-
+    const soldQuantity = item.soldQuantity || 0;
     const isOutOfStock = maxStock <= 0;
 
     return (
@@ -413,15 +409,20 @@ const HomeBuyer = ({ route, navigation }) => {
             </View>
           ) : null}
 
+          <View style={styles.ratingSoldRow}>
           <View style={styles.ratingRow}>
             <Icon name="star" size={14} color="#ffc107" />
-            <Text style={styles.ratingText}>
-              {item.avgRating || "5.0"}
-            </Text>
-            <Text style={styles.reviewCount}>
-              ({item.reviewsCount || 0} đánh giá)
+            <Text style={styles.ratingText}>{item.avgRating || "5.0"}</Text>
+            <Text style={styles.reviewCount}>({item.reviewsCount || 0})</Text>
+          </View>
+
+          <View style={styles.soldRow}>
+            <Icon name="bag-check-outline" size={14} color="#3498db" />
+            <Text style={styles.soldText}>
+              Đã bán {item.ordersCount > 999 ? "999+" : item.ordersCount || 0}
             </Text>
           </View>
+        </View>
 
           <View style={styles.buttonContainer}>
           <TouchableOpacity
@@ -871,5 +872,36 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 11,
     fontWeight: "bold",
+  },
+  ratingSoldRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 10,
+    paddingHorizontal: 4,
+  },
+  ratingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  ratingText: {
+    fontSize: 13.5,
+    fontWeight: "600",
+    color: "#333",
+  },
+  reviewCount: {
+    fontSize: 12.5,
+    color: "#777",
+  },
+  soldRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  soldText: {
+    fontSize: 13,
+    color: "#3498db",
+    fontWeight: "600",
   },
 });
