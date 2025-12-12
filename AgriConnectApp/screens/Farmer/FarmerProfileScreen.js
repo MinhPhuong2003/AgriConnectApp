@@ -247,6 +247,29 @@ const FarmerProfileScreen = ({ navigation }) => {
               <Icon name="key-outline" size={22} color="#27ae60" />
               <Text style={styles.dropdownText}>Đổi mật khẩu</Text>
             </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.dropdownItem}
+              onPress={() => {
+                setSettingsVisible(false);
+                navigation.navigate("FarmerVerification");
+              }}
+            >
+              <Icon name="shield-checkmark-outline" size={22} color="#27ae60" />
+              <Text style={styles.dropdownText}>Xác thực nông dân</Text>
+            </TouchableOpacity>
+
+            {/*
+            <TouchableOpacity
+              style={styles.dropdownItem}
+              onPress={() => {
+                setSettingsVisible(false);
+                navigation.navigate("AddProfile");
+              }}
+            >
+              <Icon name="document-attach-outline" size={22} color="#27ae60" />
+              <Text style={styles.dropdownText}>Bổ sung hồ sơ</Text>
+            </TouchableOpacity>*/}
 
             <TouchableOpacity
               style={styles.dropdownItem}

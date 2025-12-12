@@ -15,6 +15,7 @@ import {
 import Icon from "react-native-vector-icons/Ionicons";
 import auth from "@react-native-firebase/auth";
 import firestore from "@react-native-firebase/firestore";
+import HomeSlider from "../../components/HomeSlider";
 
 const HomeBuyer = ({ route, navigation }) => {
   const { searchQuery: initialSearchQuery } = route.params || {};
@@ -531,28 +532,7 @@ const HomeBuyer = ({ route, navigation }) => {
       <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
         {!(isSearchMode || isCategoryFilterMode) && (
           <>
-            <View style={styles.bannerWrapper}>
-              <TouchableOpacity
-                style={styles.bannerContainer}
-                activeOpacity={0.9}
-                onPress={() => navigation.navigate("Promotions")}
-              >
-                <Image
-                  source={{
-                    uri: "https://img.freepik.com/free-vector/organic-farming-banner-template_23-2149372809.jpg?w=2000",
-                  }}
-                  style={styles.bannerImage}
-                  resizeMode="cover"
-                />
-                <View style={styles.bannerOverlay}>
-                  <Text style={styles.bannerTitle}>Ưu đãi mùa thu!</Text>
-                  <Text style={styles.bannerSubtitle}>Giảm tới 30% rau củ tươi</Text>
-                  <View style={styles.bannerButton}>
-                    <Text style={styles.bannerButtonText}>Mua ngay</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </View>
+            <HomeSlider navigation={navigation} />
 
             <View style={styles.categorySection}>
               <View style={styles.categoryHeader}>

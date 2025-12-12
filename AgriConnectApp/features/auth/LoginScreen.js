@@ -101,13 +101,22 @@ const LoginScreen = ({ navigation }) => {
         return;
       }
 
-      userData.role === "farmer"
-        ? navigation.replace("HomeFarmer")
-        : navigation.replace("HomeBuyer");
-    } catch (err) {
-      console.log(err);
+      if (userData.role === "farmer") {
+      navigation.replace("HomeFarmer");
+    } else if (userData.role === "buyer") {
+      navigation.replace("HomeBuyer");
+    } else if (userData.role === "admin") {
+      navigation.replace("Admin");
+    } else {
+      Alert.alert("Lỗi", "Vai trò tài khoản không hợp lệ.");
+      await auth().signOut();
+      navigation.replace("Login");
     }
-  };
+  } catch (err) {
+    console.log("Lỗi navigateAfterLogin:", err);
+    Alert.alert("Lỗi", "Có lỗi xảy ra, vui lòng đăng nhập lại.");
+  }
+};
 
   const handleLogin = async (values, { setSubmitting }) => {
     try {

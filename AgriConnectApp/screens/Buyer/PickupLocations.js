@@ -231,17 +231,18 @@ const PickupLocations = ({ navigation, route }) => {
         <View style={styles.infoContainer}>
           <Text style={styles.name}>{item.name || "Sản phẩm không tên"}</Text>
           <Text style={styles.address} numberOfLines={2}>
-            {item.region || "Không có địa chỉ"}
+            {item.location?.address || item.region || "Không có địa chỉ"}
           </Text>
           <View style={styles.rowBetween}>
             <Text style={styles.details}>Chi tiết</Text>
           </View>
         </View>
         <View style={styles.right}>
-          <Image
-            source={{ uri: item.imageUrl || "https://via.placeholder.com/80" }}
-            style={styles.image}
-            onError={(e) => console.log("❌ Lỗi tải ảnh sản phẩm:", e.nativeEvent.error)}
+          <Image 
+            source={{ 
+              uri: item.imageBase64 || item.imageUrl || PLACEHOLDER
+            }} 
+            style={styles.image} 
           />
           <View style={styles.distanceBadge}>
             <Text style={styles.distanceText}>

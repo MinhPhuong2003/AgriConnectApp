@@ -31,7 +31,8 @@ import AddressSearchScreen from "../screens/Buyer/AddressSearchScreen";
 import SearchResults from "../screens/Buyer/SearchResults";
 import EditProfileScreen from "../screens/EditProfileScreen";
 import ProductDetailScreen from "../screens/Buyer/ProductDetailScreen";
-
+import AddProfileScreen from "../screens/Farmer/AddProfileScreen";
+import FarmerVerificationScreen from "../screens/Farmer/FarmerVerificationScreen";
 // Đặt Trước
 import CartPreOrderScreen from "../screens/Buyer/CartPreOrderScreen";
 import BuyerPreOrderDetailScreen from "../screens/Buyer/BuyerPreOrderDetailScreen";
@@ -49,6 +50,13 @@ import PreOrderManagementScreen from "../screens/Farmer/PreOrderManagementScreen
 import PreOrderScreen from "../screens/Farmer/PreOrderScreen";
 import AddPreOrderScreen from "../screens/Farmer/AddPreOrderScreen";
 import EditPreOrderScreen from "../screens/Farmer/EditPreOrderScreen";
+// Trang Admin
+import AdminScreen from "../screens/Admin/AdminScreen";
+import UserManagementScreen from "../screens/Admin/UserManagementScreen";
+import SliderManagementScreen from "../screens/Admin/SliderManagementScreen";
+import AddSliderScreen from "../screens/Admin/AddSliderScreen";
+import VerifyFarmerScreen from "../screens/Admin/VerifyFarmerScreen";
+import VerifyFarmerDetailScreen from "../screens/Admin/VerifyFarmerDetailScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -85,6 +93,9 @@ export default function AppNavigator() {
         <Stack.Screen name="SearchResult" component={SearchResults} options={{ headerShown: false }} />
         <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} options={{ headerShown: false }} />
         <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} options={{ headerShown: false }} />
+        {/* === Xác Thực Nông Dân === */}
+        <Stack.Screen name="AddProfile" component={AddProfileScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="FarmerVerification" component={FarmerVerificationScreen} options={{ headerShown: false }} />
         {/* === Người Mua Đặt Trước === */}
         <Stack.Screen name="BuyerPreOrderDetail" component={BuyerPreOrderDetailScreen} options={{ headerShown: false }} />
         <Stack.Screen name="CartPreOrder" component={CartPreOrderScreen} options={{ headerShown: false }} />
@@ -102,9 +113,16 @@ export default function AppNavigator() {
         <Stack.Screen name="AddPreOrder" component={AddPreOrderScreen} options={{ headerShown: false }} />
         <Stack.Screen name="EditPreOrder" component={EditPreOrderScreen} options={{ headerShown: false }} />
         <Stack.Screen name="PreOrderManagement" component={PreOrderManagementScreen} options={{ headerShown: false }} />
+        {/* === Trang Admin === */}
+        <Stack.Screen name="UserManagement" component={UserManagementScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="VerifyFarmer" component={VerifyFarmerScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="VerifyFarmerDetail" component={VerifyFarmerDetailScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="SliderManagement" component={SliderManagementScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="AddSlider" component={AddSliderScreen} options={{ headerShown: false }} />
         {/* === Home Theo Vai Trò === */}
         <Stack.Screen name="HomeBuyer" component={HomeBuyerTabs} options={{ headerShown: false }} />
         <Stack.Screen name="HomeFarmer" component={HomeFarmerTabs} options={{ headerShown: false }} />
+        <Stack.Screen name="Admin" component={AdminScreen} options={{ headerShown: false }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
